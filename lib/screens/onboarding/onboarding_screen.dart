@@ -1,7 +1,12 @@
+import "package:flutter_screenutil/flutter_screenutil.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:kharcha/components/common_button.dart';
+import 'package:kharcha/components/common_tag_chip.dart';
+import 'package:kharcha/components/common_text.dart';
+import 'package:kharcha/screens/auth/auth_screen.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
+import 'package:kharcha/utils/constants/app_icons.dart';
 import 'package:kharcha/utils/constants/app_image.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
 import 'package:kharcha/utils/my_cm.dart';
@@ -18,9 +23,8 @@ double _responsiveFont(
 }
 
 class OnboardingScreen extends StatefulWidget {
-  final VoidCallback onComplete;
 
-  const OnboardingScreen({super.key, required this.onComplete});
+  const OnboardingScreen({super.key});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -45,7 +49,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
-    widget.onComplete();
+    callNextScreenAndClearStack(context, const AuthScreen());
   }
 
   void _goToPreviousPage() {
@@ -81,13 +85,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       _currentPage = page;
                     });
                   },
-                  children: const [
+                  children: [
                     _AutoTrackingPage(),
                     _PrivacyPromisePage(),
                     _NotificationTaggingPage(),
                   ],
                 ),
               ),
+              sb(16),
               _buildIndicator(),
               sb(18),
               _buildBottomActions(),
@@ -100,17 +105,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildTopBar() {
-    final double appNameSize = _responsiveFont(context, 34);
 
     if (_currentPage == 1) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.fromLTRB(24, 14, 24, 8),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Text(
+          child: CommonText(
             AppStrings.onboardingSecurityProtocol,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 12.sp,
               fontWeight: FontWeight.w500,
               letterSpacing: 2.8,
               color: AppColors.primaryDark,
@@ -122,32 +126,34 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (_currentPage == 2) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 14, 6),
+        padding: EdgeInsets.fromLTRB(12, 8, 14, 6),
         child: Row(
           children: [
             IconButton(
               onPressed: _goToPreviousPage,
-              icon: const Icon(Icons.arrow_back, color: AppColors.primary),
+              icon: Icon(
+                AppIcons.arrowBackIos,
+                color: AppColors.primary,
+              ),
             ),
             Expanded(
               child: Center(
-                child: Text(
+                child: CommonText(
                   AppStrings.appName,
                   style: TextStyle(
-                    fontSize: appNameSize,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 24.sp,
+                    fontWeight: FontWeight.w900,
                     color: AppColors.primaryDark,
                   ),
                 ),
               ),
             ),
-            const Icon(Icons.lock_outline, color: AppColors.greyDark),
           ],
         ),
       );
     }
 
-    return Image.asset(AppImage.logo2, height: 100, fit: BoxFit.contain);
+    return Image.asset(AppImage.logo2, height: 80, fit: BoxFit.contain);
   }
 
   Widget _buildIndicator() {
@@ -158,7 +164,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeInOut,
-          margin: const EdgeInsets.symmetric(horizontal: 6),
+          margin: EdgeInsets.symmetric(horizontal: 6),
           width: isActive ? 30 : 8,
           height: 8,
           decoration: BoxDecoration(
@@ -175,12 +181,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (_currentPage == 1) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: EdgeInsets.symmetric(horizontal: 24),
         child: Row(
           children: [
             TextButton(
               onPressed: _goToPreviousPage,
-              child: Text(
+              child: CommonText(
                 AppStrings.back,
                 style: TextStyle(
                   color: AppColors.greyDark,
@@ -195,7 +201,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               buttonText: AppStrings.next,
               btnWidth: 160,
               showTrailingIcon: true,
-              trailingIcon: const Icon(Icons.arrow_forward, size: 18),
+              trailingIcon: Icon(AppIcons.arrowForwardIos, size: 18),
               fontSize: actionTextSize,
             ),
           ],
@@ -205,14 +211,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     if (_currentPage == 2) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           children: [
             CustomButton(
               onButtonPressed: _goToNextPage,
               buttonText: AppStrings.getStarted,
               showTrailingIcon: true,
-              trailingIcon: const Icon(Icons.arrow_forward_ios, size: 16),
+              trailingIcon: Icon(AppIcons.arrowForwardIos, size: 16),
               btnHeight: 64,
               borderRadius: 32,
             ),
@@ -222,14 +228,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
           CustomButton(
             onButtonPressed: _goToNextPage,
             buttonText: AppStrings.next,
             showTrailingIcon: true,
-            trailingIcon: const Icon(Icons.arrow_forward, size: 20),
+            trailingIcon: Icon(AppIcons.arrowForwardIos, size: 20),
             btnHeight: 64,
             borderRadius: 32,
           ),
@@ -248,24 +254,23 @@ class _AutoTrackingPage extends StatelessWidget {
     final double bodySize = _responsiveFont(context, 16);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
+      padding: EdgeInsets.fromLTRB(22, 8, 22, 10),
       child: Column(
         children: [
           Image.asset(
             AppImage.onboardingHeroAsset,
-            width: 400,
+            width: 280.sp,
             fit: BoxFit.contain,
           ),
-          RichText(
-            textAlign: TextAlign.center,
-            text: TextSpan(
+          CommonText.rich(
+            TextSpan(
               style: TextStyle(
                 fontFamily: 'FunnelDisplay',
                 fontSize: titleSize,
                 fontWeight: FontWeight.w700,
                 color: AppColors.black,
               ),
-              children: const [
+              children: [
                 TextSpan(text: AppStrings.onBoardingTitle1),
                 TextSpan(text: '\n'),
                 TextSpan(
@@ -274,9 +279,10 @@ class _AutoTrackingPage extends StatelessWidget {
                 ),
               ],
             ),
+            textAlign: TextAlign.center,
           ),
           sb(14),
-          Text(
+          CommonText(
             AppStrings.onBoardingDesc1,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -297,17 +303,16 @@ class _PrivacyPromisePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double headingSize = _responsiveFont(context, 48);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 6, 24, 10),
+      padding: EdgeInsets.fromLTRB(24, 6, 24, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          CommonText(
             AppStrings.onBoardingTitle2,
             style: TextStyle(
-              fontSize: headingSize,
+              fontSize: 40.sp,
               height: 1.0,
               fontWeight: FontWeight.w700,
               color: AppColors.black,
@@ -327,48 +332,48 @@ class _PrivacyPromisePage extends StatelessWidget {
                   bottom: 0,
                   child: Image.asset(
                     AppStrings.decorativePercentAsset,
-                    width: 128,
+                    width: 158.sp,
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                  padding: EdgeInsets.fromLTRB(18, 18, 18, 16),
                   child: Column(
                     children: [
                       Align(
                         alignment: Alignment.centerLeft,
                         child: SizedBox(
-                          width: 66,
-                          height: 66,
+                          width: 46.sp,
+                          height: 46.sp,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: AppColors.primaryLight,
                               borderRadius: BorderRadius.all(
-                                Radius.circular(16),
+                                Radius.circular(13.sp),
                               ),
                             ),
                             child: Icon(
-                              Icons.check_circle,
+                              AppIcons.checkCircle,
                               color: AppColors.primary,
-                              size: 34,
+                              size: 24.sp,
                             ),
                           ),
                         ),
                       ),
-                      sb(28),
+                      sb(18.sp),
                       _PrivacyItem(
-                        icon: Icons.shield_outlined,
+                        icon: AppIcons.shieldOutlined,
                         title: AppStrings.privacyTitle1,
                         subtitle: AppStrings.privacyDesc1,
                       ),
                       sb(18),
                       _PrivacyItem(
-                        icon: Icons.devices_outlined,
+                        icon: AppIcons.devicesOutlined,
                         title: AppStrings.privacyTitle2,
                         subtitle: AppStrings.privacyDesc2,
                       ),
                       sb(18),
                       _PrivacyItem(
-                        icon: Icons.bar_chart_outlined,
+                        icon: AppIcons.barChartOutlined,
                         title: AppStrings.privacyTitle3,
                         subtitle: AppStrings.privacyDesc3,
                       ),
@@ -389,38 +394,36 @@ class _NotificationTaggingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double headingSize = _responsiveFont(context, 35);
-    final double bodySize = _responsiveFont(context, 18);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(22, 4, 22, 8),
       child: Column(
         children: [
-          Image.asset(
-              AppImage.onboardingCardAsset,
-              width: double.infinity,
-              fit: BoxFit.fitWidth,
-            ),
+          sb(10),
           Padding(
-            padding: const EdgeInsets.fromLTRB(22, 20, 22, 0),
+            padding: EdgeInsets.fromLTRB(18, 8, 18, 0),
+            child: _QuickTagPreviewCard(),
+          ),
+          sb(30),
+          Padding(
+            padding: EdgeInsets.fromLTRB(22, 20, 22, 0),
             child: Column(
               children: [
-                Text(
+                CommonText(
                   AppStrings.onBoardingTitle3,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: headingSize,
+                    fontSize: 38.sp,
                     height: 1.05,
                     fontWeight: FontWeight.w900,
                     color: AppColors.black,
                   ),
                 ),
                 sb(12),
-                Text(
+                CommonText(
                   AppStrings.onBoardingDesc3,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: bodySize,
+                    fontSize: 16.sp,
                     height: 1.35,
                     fontWeight: FontWeight.w400,
                     color: AppColors.greyDark,
@@ -429,8 +432,94 @@ class _NotificationTaggingPage extends StatelessWidget {
               ],
             ),
           ),
-    ],
-      ));
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickTagPreviewCard extends StatelessWidget {
+  const _QuickTagPreviewCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.black.withValues(alpha: 0.12),
+            blurRadius: 26,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 16, 20, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CommonText(
+                  AppStrings.onboardingLedgerLabel,
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.3,
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+            sb(6),
+            CommonText(
+              AppStrings.onboardingExpenseDetected,
+              style: TextStyle(
+                fontSize: 24.sp,
+                fontWeight: FontWeight.w900,
+                color: AppColors.black,
+                height: 1,
+              ),
+            ),
+            sb(6),
+            CommonText(
+              AppStrings.onboardingSampleExpense,
+              style: TextStyle(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w500,
+                color: AppColors.greyDark,
+              ),
+            ),
+            sb(14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                CommonTagChip(
+                  icon: Icons.restaurant,
+                  label: AppStrings.onboardingTagFood,
+                  iconColor: AppColors.orange,
+                ),
+                CommonTagChip(
+                  icon: Icons.flight,
+                  label: AppStrings.onboardingTagTravel,
+                  iconColor: AppColors.blue,
+                ),
+                CommonTagChip(
+                  icon: Icons.shopping_bag_outlined,
+                  label: AppStrings.onboardingTagShopping,
+                  iconColor: AppColors.purple,
+                ),
+                CommonTagChip(
+                  icon: Icons.receipt_long,
+                  label: AppStrings.onboardingTagOther,
+                  iconColor: AppColors.greyDark,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -451,7 +540,7 @@ class _PrivacyItem extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: EdgeInsets.only(top: 4),
           child: Icon(icon, size: 29, color: AppColors.primaryDark),
         ),
         sbw(10),
@@ -459,19 +548,19 @@ class _PrivacyItem extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              CommonText(
                 title,
-                style: const TextStyle(
-                  fontSize: 22,
+                style: TextStyle(
+                  fontSize: 18.sp,
                   fontWeight: FontWeight.w600,
                   color: AppColors.black,
                 ),
               ),
               sb(5),
-              Text(
+              CommonText(
                 subtitle,
-                style: const TextStyle(
-                  fontSize: 18,
+                style: TextStyle(
+                  fontSize: 14.sp,
                   color: AppColors.greyDark,
                   fontWeight: FontWeight.w500,
                 ),

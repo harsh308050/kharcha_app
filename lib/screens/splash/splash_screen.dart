@@ -13,16 +13,16 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   static const SystemUiOverlayStyle _splashOverlayStyle = SystemUiOverlayStyle(
-    statusBarColor: AppColors.primary,
+    statusBarColor: AppColors.transparent,
     statusBarIconBrightness: Brightness.light,
     statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: AppColors.primary,
+    systemNavigationBarColor: AppColors.transparent,
     systemNavigationBarIconBrightness: Brightness.light,
   );
   @override
   void initState() {
     Future.delayed(const Duration(seconds: 3), () {
-      callNextScreenAndClearStack(context, OnboardingScreen(onComplete: () {}));
+      callNextScreenAndClearStack(context, OnboardingScreen());
     });
     super.initState();
   }
@@ -40,6 +40,7 @@ class _SplashScreenState extends State<SplashScreen> {
     );
     super.dispose();
   }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(

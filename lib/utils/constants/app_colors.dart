@@ -2,6 +2,7 @@ import 'package:flutter/animation.dart';
 
 class AppColors {
   static const Color primary = Color(0xFF1A7F6B);
+  static const Color secondary = Color(0xFF006553);
   static const Color primaryLight = Color.fromARGB(35, 26, 127, 107);
   static const Color primaryDark = Color(0xFF006553);
   static const Color white = Color(0xFFFFFFFF);
@@ -13,4 +14,7 @@ class AppColors {
   static const Color red = Color(0xFFBA1A1A);
   static const Color orange = Color(0xFFF97316);
   static const Color yellow = Color(0xFFFBBF24);
+  static const Color blue = Color(0xFF3B82F6);
+  static const Color purple = Color(0xFFA855F7);
+  static const Color transparent = Color(0x00000000);
 }

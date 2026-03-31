@@ -19,6 +19,7 @@ class AppStrings {
   static const String onboardingTagFood = 'Food';
   static const String onboardingTagTravel = 'Travel';
   static const String onboardingTagShopping = 'Shopping';
+    static const String onboardingTagOther = 'Other';
   static const String decorativePercentAsset =
       'assets/images/decorative_percent.png';
   static const String privacyTitle1 = 'We never upload your transaction data';
@@ -27,7 +28,7 @@ class AppStrings {
   static const String privacyDesc2 =
       'Local-first encryption ensures that only your hardware holds the keys to your ledger.';
   static const String privacyTitle3 =
-      'Only anonymised signals used for insights';
+      'Only anonymised signals used for Report';
   static const String privacyDesc3 =
       'Aggregated, non-identifiable data points help us calibrate better trends for you.';
   static const String getStarted = 'Get Started';
@@ -35,6 +36,21 @@ class AppStrings {
   static const String skip = 'Skip';
   static const String back = 'Back';
   static const String continueWithGoogle = 'Continue with Google';
+  static const String signinWithEmail = 'Sign in with Email';
+  static const String createAccount = 'Create Account';
+  static const String joinTheLedger = 'Join the Ledger';
+  static const String createYourSpace = 'Create Your Space';
+  static const String createYourSpaceSubtitle = 'Private. Secure. Yours.';
+  static const String fullName = 'FULL NAME';
+  static const String emailAddress = 'EMAIL ADDRESS';
+  static const String password = 'PASSWORD';
+  static const String alreadyHaveAccount = 'Already have an account?';
+  static const String encryptedAndSecure =
+            'Your data is encrypted and stays on your device.';
+  static const String donthaveanAccount = 'Don\'t have an account?';
+  static const String signin = 'Sign in';
+  static const String iWillDoItLater = 'I\'ll Do Later';
+  static const String signinWithEmailDesc = 'Enter your details to access your private ledger.';
   static const String signInToContinue = 'Sign in to continue';
   static const String signInToContinueSubtitle =
       'Manage your wealth with editorial precision.';
@@ -62,11 +78,14 @@ class AppStrings {
       'We are securely curating your transactions from the last 12 months.';
   static const String takeToDashboard = 'Take me to my dashboard';
   static const String home = 'Home';
+  static const String ledger = 'Ledger';
   static const String transactions = 'Transactions';
+  static const String transactionsFound = 'Transactions Found';
   static const String reports = 'Reports';
   static const String budget = 'Budget';
   static const String settings = 'Settings';
   static const String activity = 'Activity';
+    static const String date = 'Date';
   static const String view = 'View';
   static const String budgetProgress = 'Budget Progress';
   static const String transactionDetail = 'Transaction Detail';
@@ -95,4 +114,94 @@ class AppStrings {
   static const String overBudgetAlerts = 'Over-budget Alerts';
   static const String notifications = 'Notifications';
   static const String account = 'Account';
+
+  // Home tab
+  static const String goodMorningUser = 'Good morning, User!';
+  static const String totalSpend = 'TOTAL SPEND';
+  static const String income = 'INCOME';
+  static const String expenses = 'EXPENSES';
+  static const String balance = 'BALANCE';
+  static const String budgetUsedTitle = '60% of budget used';
+  static const String budgetUsedDesc =
+      "You've spent ₹12,400 more than last week in 'Dining'.";
+  static const String goalAchieved = 'GOAL ACHIEVED';
+  static const String newCarFund = 'New Car Fund';
+  static const String newCarFundDesc =
+      'Target of ₹5,00,000 successfully reached!';
+  static const String foodAndDrinks = 'Food & Drinks';
+  static const String travel = 'Travel';
+
+    // Ledger tab
+    static const String today = 'Today';
+    static const String thisWeek = 'This Week';
+    static const String thisMonth = 'This Month';
+    static const String thisYear = 'This Year';
+    static const String yesterday = 'Yesterday';
+    static const String tagNow = 'Tag now';
+    static const String dining = 'Dining';
+    static const String salary = 'Salary';
+    static const String transport = 'Transport';
+
+    // Reports tab
+    static const String october2025Report = 'October 2025';
+    static const String generatedOnDate = 'Generated on Nov 01, 2023 • 31 days analyzed';
+    static const String monthlyDelta = 'MONTHLY DELTA';
+    static const String monthlyDeltaValue = '-12.4%';
+    static const String vsSeptember2023 = 'vs. September 2025';
+    static const String topCategoryHousing = 'Housing';
+    static const String topCategoryShare = '38% of total wallet';
+    static const String top5Merchants = 'Top 5 Merchants';
+    static const String categoryHeader = 'CATEGORY';
+    static const String amountHeader = 'AMOUNT';
+    static const String shareHeader = 'SHARE';
+    static const String groceries = 'Groceries';
+    static const String diningOut = 'Dining Out';
+    static const String housingAmount = '₹1,600.00';
+    static const String groceriesAmount = '₹840.20';
+    static const String diningOutAmount = '₹512.30';
+    static const String transportAmount = '₹320.00';
+    static const String housingShare = '37.4%';
+    static const String groceriesShare = '19.6%';
+    static const String diningOutShare = '12.0%';
+    static const String transportShare = '7.5%';
+    static const String wholeFoods = 'Whole Foods';
+    static const String conEdUtilities = 'ConEd Utilities';
+    static const String blueBottle = 'Blue Bottle';
+    static const String threeTransactions = '3 Transactions';
+    static const String oneTransaction = '1 Transaction';
+    static const String twelveTransactions = '12 Transactions';
+    static const String wholeFoodsAmount = '₹425.00';
+    static const String conEdAmount = '₹189.50';
+    static const String blueBottleAmount = '₹124.20';
+    static const String subscriptionTotal = 'SUBSCRIPTION TOTAL';
+    static const String subscriptionAmount = '₹84.99';
+    static const String reportTotalSpendAmount = '₹4,280.50';
+
+    // Budget tab
+    static const String monthlyOverview = 'MONTHLY OVERVIEW';
+    static const String remaining = 'REMAINING';
+    static const String totalBudgetLimit = 'Total Budget Limit';
+    static const String spentPrefix = 'Spent:';
+    static const String addNewCategoryTitle = 'Add New Category';
+    static const String addNewCategorySub = 'Set a new monthly spending limit';
+    static const String proInsight = 'PRO INSIGHT';
+    static const String budgetInsightTitle =
+        'Your "Dining" spend is\n15% lower than last\nmonth.';
+    static const String budgetInsightDesc =
+        'Maintaining this trend could save\nyou approximately \$120 by the end\nof this quarter. Redirect to savings?';
+    static const String exploreTrends = 'Explore Trends';
+    static const String dismiss = 'Dismiss';
+
+    // Settings tab
+    static const String premiumMember = 'PREMIUM MEMBER';
+    static const String categories = 'CATEGORIES';
+    static const String dataAndPrivacy = 'DATA & PRIVACY';
+    static const String exportData = 'Export Data (CSV/PDF)';
+    static const String logout = 'Logout';
+    static const String categoryCount = '12';
+
+    // Signup/Edit profile
+    static const String editProfile = 'Edit Profile';
+    static const String updateYourProfile = 'Update your profile details';
+    static const String saveProfile = 'Save Profile';
 }

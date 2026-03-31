@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kharcha/components/common_loader.dart';
 import 'package:kharcha/utils/anim/wave_dots.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
+import 'package:kharcha/utils/constants/app_icons.dart';
 import 'package:kharcha/utils/constants/app_sizes.dart';
 
 enum ButtonLoaderType { circular, waveDots }
@@ -12,8 +13,6 @@ class CustomButton extends StatelessWidget {
   final bool isLoading;
   final ButtonLoaderType loaderType;
 
-  // Background options - User can choose ONE of these approaches:
-  
   // Option 1: Single solid color
   final Color? backgroundColor;
   
@@ -33,6 +32,10 @@ class CustomButton extends StatelessWidget {
   // Icons
   final Widget? prefixIcon;
   final Widget? trailingIcon;
+  final String? prefixImageAsset;
+  final String? trailingImageAsset;
+  final double? prefixImageSize;
+  final double? trailingImageSize;
   final bool showPrefixIcon;
   final bool showTrailingIcon;
   final Color? iconColor;
@@ -66,6 +69,10 @@ class CustomButton extends StatelessWidget {
     // Icons
     this.prefixIcon,
     this.trailingIcon,
+    this.prefixImageAsset,
+    this.trailingImageAsset,
+    this.prefixImageSize,
+    this.trailingImageSize,
     this.showPrefixIcon = false,
     this.showTrailingIcon = false,
     this.iconColor,
@@ -93,12 +100,36 @@ class CustomButton extends StatelessWidget {
     final double effectiveIconSize = iconSize ?? 24.0;
     final double effectiveBorderRadius = borderRadius ?? AppSizes.btnHeight / 2;
 
-    // Default icons if not provided but show flags are true
-    final Widget effectivePrefixIcon = prefixIcon ?? 
-        Icon(Icons.arrow_back, color: effectiveIconColor, size: effectiveIconSize);
-    
-    final Widget effectiveTrailingIcon = trailingIcon ?? 
-        Icon(Icons.arrow_forward, color: effectiveIconColor, size: effectiveIconSize);
+    // Prefix/suffix precedence: explicit widget > image asset > default icon.
+    final Widget effectivePrefixIcon =
+        prefixIcon ??
+        (prefixImageAsset != null
+            ? Image.asset(
+                prefixImageAsset!,
+                width: prefixImageSize ?? effectiveIconSize,
+                height: prefixImageSize ?? effectiveIconSize,
+                fit: BoxFit.contain,
+              )
+            : Icon(
+                AppIcons.arrowBack,
+                color: effectiveIconColor,
+                size: effectiveIconSize,
+              ));
+
+    final Widget effectiveTrailingIcon =
+        trailingIcon ??
+        (trailingImageAsset != null
+            ? Image.asset(
+                trailingImageAsset!,
+                width: trailingImageSize ?? effectiveIconSize,
+                height: trailingImageSize ?? effectiveIconSize,
+                fit: BoxFit.contain,
+              )
+            : Icon(
+                AppIcons.arrowForward,
+                color: effectiveIconColor,
+                size: effectiveIconSize,
+              ));
 
     // Button content
     Widget buttonChild = isLoading
