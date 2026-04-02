@@ -224,15 +224,15 @@ class _CustomBottomBar extends StatelessWidget {
                     children: [
                       // Active background only around icon
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        padding: EdgeInsets.symmetric(horizontal: 12.sp, vertical: 6),
                         decoration: BoxDecoration(
-                          color: isActive ? AppColors.primary : AppColors.transparent,
+                          color: isActive ? AppColors.primaryLight : AppColors.transparent,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Icon(
                           item.icon,
                           size: 28,
-                          color: isActive ? AppColors.white : AppColors.greyDark,
+                          color: isActive ? AppColors.primaryDark : AppColors.greyDark,
                         ),
                       ),
                       SizedBox(height: 6.h),

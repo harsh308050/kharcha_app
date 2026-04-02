@@ -544,16 +544,10 @@ class _SignupScreenState extends State<SignupScreen> {
                     buttonText: widget.isEditMode
                         ? AppStrings.saveProfile
                         : AppStrings.createAccount,
-                    btnHeight: 58,
                     borderRadius: 999,
                     fontSize: 18.sp,
                     fontWeight: FontWeight.w600,
-                    showTrailingIcon: true,
-                    trailingIcon: Icon(
-                      AppIcons.arrowForwardIos,
-                      size: 18,
-                      color: AppColors.white,
-                    ),
+                    
                   ),
                   sb(22),
                   if (!widget.isEditMode) ...[

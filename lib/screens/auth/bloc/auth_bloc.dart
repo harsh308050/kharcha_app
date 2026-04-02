@@ -140,6 +140,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthLogoutRequested event,
     Emitter<AuthState> emit,
   ) async {
+    emit(
+      state.copyWith(
+        isLoading: true,
+        actionType: AuthActionType.none,
+        clearErrorMessage: true,
+      ),
+    );
+
     try {
       await _repository.logout();
       emit(

@@ -22,7 +22,7 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  static const double _infoCardHeight = 178;
+  static const double _infoCardHeight = 140;
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +84,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       sb(20),
                       Container(
-                        padding: EdgeInsets.all(26),
+                        padding: EdgeInsets.all(20),
                         width: double.infinity,
                         decoration: BoxDecoration(
                           boxShadow: [
@@ -132,9 +132,9 @@ class _AuthScreenState extends State<AuthScreen> {
                               isLoading: isGoogleLoading,
                               showPrefixIcon: true,
                               prefixImageAsset: AppImage.google,
-                              prefixImageSize: 24,
+                              prefixImageSize: 20,
                               buttonText: AppStrings.continueWithGoogle,
-                              fontSize: 16.sp,
+                              fontSize: 14.sp,
                             ),
                             sb(15),
                             CustomButton(
@@ -144,9 +144,9 @@ class _AuthScreenState extends State<AuthScreen> {
                                 callNextScreen(context, const SigninScreen());
                               },
                               showPrefixIcon: true,
-                              prefixIcon: Icon(AppIcons.mail, size: 30),
+                              prefixIcon: Icon(AppIcons.mail, size: 26),
                               buttonText: AppStrings.signinWithEmail,
-                              fontSize: 16.sp,
+                              fontSize: 14.sp,
                             ),
                             sb(30),
                             SizedBox(
@@ -275,9 +275,9 @@ class _SecurityInfoCard extends StatelessWidget {
             CommonText(
               title,
               style: TextStyle(
-                fontSize: 16.sp,
+                fontSize: 14.sp,
                 fontWeight: FontWeight.w600,
-                color: AppColors.greyDark,
+                color: AppColors.black,
               ),
               textAlign: TextAlign.start,
             ),
@@ -286,7 +286,7 @@ class _SecurityInfoCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12.sp,
                 fontWeight: FontWeight.w500,
-                color: AppColors.black,
+                color: AppColors.greyDark,
               ),
               textAlign: TextAlign.start,
             ),
