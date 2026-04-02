@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:kharcha/components/common_loader.dart';
 import 'package:kharcha/utils/anim/wave_dots.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
@@ -171,7 +172,7 @@ class CustomButton extends StatelessWidget {
     Widget buildButton() {
       return Container(
         width: btnWidth ?? double.infinity,
-        height: btnHeight ?? AppSizes.btnHeight,
+        height: btnHeight?? AppSizes.btnHeight,
         decoration: useGradient
             ? BoxDecoration(
                 gradient: LinearGradient(

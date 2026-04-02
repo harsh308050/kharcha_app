@@ -18,5 +18,5 @@ class AppSizes {
   static double get tileTitle => 17.0.sp;
   static double get tileSubtitle => 14.0.sp;
   static double get trailIconSize => 16.0.sp;
-  static double get btnHeight => 60.0.h;
+  static double get btnHeight => 50.0.h;
 }

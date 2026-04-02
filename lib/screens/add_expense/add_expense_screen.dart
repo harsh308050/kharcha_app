@@ -45,7 +45,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   ];
 
   int _selectedCategory = 0;
-  String _amount = '0.00';
+  String _amount = '0';
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
   final TextEditingController _noteController = TextEditingController();
@@ -71,12 +71,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           _amount = _amount.substring(0, _amount.length - 1);
         }
         if (_amount.isEmpty) {
-          _amount = '0.00';
+          _amount = '0';
         }
         return;
       }
 
-      if (_amount == '0.00') {
+      if (_amount == '0') {
         _amount = '';
       }
 
@@ -91,7 +91,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         return;
       }
 
-      _amount = '$_amount$key';
+      // Limit to 8 digits (before and after decimal)
+      final String tempAmount = '$_amount$key';
+      final List<String> parts = tempAmount.split('.');
+      final String integerPart = parts[0];
+      
+      // Check if we would exceed 8 total digits
+      if (integerPart.replaceFirst(RegExp(r'^0+'), '').length > 8) {
+        return;
+      }
+
+      _amount = tempAmount;
     });
   }
 
@@ -200,12 +210,23 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F4F4),
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(18, 8, 18, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                18,
+                8,
+                18,
+                24 + MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
               Row(
                 children: [
                   IconButton(
@@ -289,7 +310,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
                   itemCount: _categories.length,
-                  separatorBuilder: (_, __) => sbw(12),
+                  separatorBuilder: (_, __) => sbw(2),
                   itemBuilder: (BuildContext context, int index) {
                     final bool isSelected = _selectedCategory == index;
                     final _CategoryItemData item = _categories[index];
@@ -378,7 +399,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               sb(12),
               _NoteCard(controller: _noteController),
               sb(12),
-              Expanded(child: CommonNumberPad(onKeyTap: _onKeyTap)),
+              SizedBox(
+                height: 280,
+                child: CommonNumberPad(onKeyTap: _onKeyTap),
+              ),
               sb(16),
               SizedBox(
                 width: double.infinity,
@@ -404,8 +428,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   ),
                 ),
               ),
-            ],
-          ),
+              sb(12),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

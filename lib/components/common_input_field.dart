@@ -38,6 +38,8 @@ class CommonInputField extends StatelessWidget {
   final Color? enabledBorderColor;
   final Color? errorBorderColor;
   final Color? disabledBorderColor;
+  final bool hasError;
+  final String? errorMessage;
 
   final double borderRadius;
   final double borderWidth;
@@ -81,6 +83,8 @@ class CommonInputField extends StatelessWidget {
     this.enabledBorderColor,
     this.errorBorderColor,
     this.disabledBorderColor,
+    this.hasError = false,
+    this.errorMessage,
     this.borderRadius = 24,
     this.borderWidth = 1,
     this.focusedBorderWidth = 2,
@@ -93,10 +97,16 @@ class CommonInputField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool showManualError =
+        hasError && (errorMessage?.trim().isNotEmpty ?? false);
+    final Color resolvedErrorColor = errorBorderColor ?? AppColors.red;
+
     final InputBorder enabledBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(borderRadius),
       borderSide: BorderSide(
-        color: enabledBorderColor ?? AppColors.grey,
+        color: showManualError
+            ? resolvedErrorColor
+            : (enabledBorderColor ?? AppColors.grey),
         width: borderWidth,
       ),
     );
@@ -104,7 +114,9 @@ class CommonInputField extends StatelessWidget {
     final InputBorder focusedBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(borderRadius),
       borderSide: BorderSide(
-        color: focusedBorderColor ?? AppColors.primary,
+        color: showManualError
+            ? resolvedErrorColor
+            : (focusedBorderColor ?? AppColors.primary),
         width: focusedBorderWidth,
       ),
     );
@@ -112,7 +124,7 @@ class CommonInputField extends StatelessWidget {
     final InputBorder errorBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(borderRadius),
       borderSide: BorderSide(
-        color: errorBorderColor ?? AppColors.red,
+        color: resolvedErrorColor,
         width: errorBorderWidth,
       ),
     );
@@ -205,6 +217,19 @@ class CommonInputField extends StatelessWidget {
             SizedBox(height: height, child: textField)
           else
             textField,
+          if (showManualError)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: CommonText(
+                errorMessage,
+                style: errorStyle ??
+                    TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: resolvedErrorColor,
+                    ),
+              ),
+            ),
         ],
       ),
     );

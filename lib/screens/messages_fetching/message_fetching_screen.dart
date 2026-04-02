@@ -1,5 +1,9 @@
 import "package:flutter_screenutil/flutter_screenutil.dart";
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kharcha/bloc/sms/sms_bloc.dart';
+import 'package:kharcha/bloc/sms/sms_event.dart';
+import 'package:kharcha/bloc/sms/sms_state.dart';
 import 'package:kharcha/components/common_app_bar.dart';
 import 'package:kharcha/components/sync_progress_circle.dart';
 import 'package:kharcha/components/common_text.dart';
@@ -20,11 +24,24 @@ class _MessageFetchingScreenState extends State<MessageFetchingScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 5), () {
-      callNextScreenAndClearStack(context, HomeScreen());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      final SmsBloc smsBloc = context.read<SmsBloc>();
+      final SmsState currentState = smsBloc.state;
+
+      if (currentState is SmsInitial ||
+          currentState is SmsFailure ||
+          currentState is SmsPermissionDenied) {
+        smsBloc.add(const SmsFetchRequested());
+      } else if (currentState is SmsLoaded) {
+        callNextScreenAndClearStack(context, const HomeScreen());
+      }
     });
-    
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -42,89 +59,132 @@ class _MessageFetchingScreenState extends State<MessageFetchingScreen> {
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CommonText(
-                AppStrings.systemSync,
-                style: TextStyle(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 2,
-                  color: AppColors.greyDark,
-                ),
-              ),
-              sb(8.sp),
-              CommonText(
-                AppStrings.importHistoryTitle,
-                style: TextStyle(
-                  fontSize: 32.sp,
-                  height: 1,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.black,
-                ),
-              ),
-              sb(7.sp),
-              CommonText(
-                AppStrings.importHistoryDesc,
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.greyDark,
-                ),
-              ),
-              sb(70.sp),
-              Center(
-                child: SyncProgressCircle(
-                  progress: 0.6,
-                  statusText: 'Scanning...',
-                  size: 240,
-                  strokeWidth: 16,
-                  ringColor: AppColors.primary,
-                  fillColor: AppColors.greyLight,
-                  statusTextColor: AppColors.primaryDark,
-                ),
-              ),
-              sb(22),
-              Center(
-                child: Column(
+          child: BlocConsumer<SmsBloc, SmsState>(
+            listener: (BuildContext context, SmsState state) {
+              if (state is SmsLoaded) {
+                Future<void>.delayed(const Duration(milliseconds: 300), () {
+                  if (!mounted || !context.mounted) return;
+                  callNextScreenAndClearStack(context, const HomeScreen());
+                });
+              }
+            },
+            builder: (BuildContext context, SmsState state) {
+                final bool isLoading = state is SmsLoading || state is SmsInitial;
+                final int count = state is SmsLoaded
+                  ? state.transactions.length
+                  : state is SmsLoading
+                    ? state.matchedMessages
+                    : 0;
+                final double progress = state is SmsLoading
+                  ? (state.totalMessages == 0
+                    ? 0
+                    : state.processedMessages / state.totalMessages)
+                  : isLoading
+                    ? 0
+                    : 1.0;
+                final String statusText = state is SmsPermissionDenied
+                    ? 'SMS permission denied'
+                    : state is SmsFailure
+                        ? 'Failed to read messages'
+                        : isLoading
+                            ? 'Scanning...'
+                            : 'Scan complete';
+                final String footerText = state is SmsPermissionDenied
+                  ? 'Allow SMS permission to continue'
+                  : state is SmsFailure
+                    ? (state.message.isEmpty
+                      ? 'Unable to read messages'
+                      : state.message)
+                    : 'Please wait while we fetch your messages';
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     CommonText(
-                      '526',
+                      AppStrings.systemSync,
                       style: TextStyle(
-                        fontSize: 34.sp,
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 2,
+                        color: AppColors.greyDark,
+                      ),
+                    ),
+                    sb(8.sp),
+                    CommonText(
+                      AppStrings.importHistoryTitle,
+                      style: TextStyle(
+                        fontSize: 32.sp,
+                        height: 1,
                         fontWeight: FontWeight.w900,
                         color: AppColors.black,
                       ),
                     ),
+                    sb(7.sp),
                     CommonText(
-                      AppStrings.transactionsFound,
+                      AppStrings.importHistoryDesc,
                       style: TextStyle(
-                        fontSize: 16.sp,
+                        fontSize: 14.sp,
                         fontWeight: FontWeight.w500,
-                        letterSpacing: 1.2,
                         color: AppColors.greyDark,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SizedBox(
-                    child: CommonText(
-                          'Please wait while we fetch your messages',
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.black,
+                    sb(70.sp),
+                    Center(
+                      child: SyncProgressCircle(
+                        progress: progress,
+                        statusText: statusText,
+                        size: 240,
+                        strokeWidth: 16,
+                        ringColor: AppColors.primary,
+                        fillColor: AppColors.greyLight,
+                        statusTextColor: AppColors.primaryDark,
+                      ),
+                    ),
+                    sb(22),
+                    Center(
+                      child: Column(
+                        children: [
+                          CommonText(
+                            '$count',
+                            style: TextStyle(
+                              fontSize: 34.sp,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.black,
+                            ),
+                          ),
+                          CommonText(
+                            AppStrings.transactionsFound,
+                            style: TextStyle(
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 1.2,
+                              color: AppColors.greyDark,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: SizedBox(
+                          child: CommonText(
+                            footerText,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.black,
+                            ),
                           ),
                         ),
-                  ),
-                ),
-              ),
-            ],
+                      ),
+                    ),
+                  ],
+                );
+            },
           ),
         ),
       ),

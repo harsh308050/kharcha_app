@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:kharcha/screens/messages_fetching/message_fetching_screen.dart';
 import 'package:kharcha/screens/onboarding/onboarding_screen.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/my_cm.dart';
@@ -21,10 +23,21 @@ class _SplashScreenState extends State<SplashScreen> {
   );
   @override
   void initState() {
+    super.initState();
+
     Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted) {
+        return;
+      }
+
+      final User? currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        callNextScreenAndClearStack(context, const MessageFetchingScreen());
+        return;
+      }
+
       callNextScreenAndClearStack(context, OnboardingScreen());
     });
-    super.initState();
   }
 
   @override

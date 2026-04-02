@@ -165,6 +165,7 @@ class BudgetTabScreenState extends State<BudgetTabScreen> {
                   Navigator.pop(context);
                 },
                 buttonText: AppStrings.addNewCategory,
+                //btn height
                 btnHeight: 48,
                 borderRadius: 14,
                 backgroundColor: AppColors.primary,
@@ -230,8 +231,7 @@ class BudgetTabScreenState extends State<BudgetTabScreen> {
                     child: CustomButton(
                       onButtonPressed: _showAddCategorySheet,
                       buttonText: AppStrings.newBudget,
-                      btnHeight: 56,
-                      fontSize: 15.sp,
+                      fontSize: 14.sp,
                     ),
                   ),
                 ],

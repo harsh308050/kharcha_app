@@ -136,7 +136,6 @@ class ReportTabScreenState extends State<ReportTabScreen> {
           CustomButton(
             onButtonPressed: () {},
             buttonText: AppStrings.exportPdf,
-            btnHeight: 54,
             borderRadius: 28,
             backgroundColor: AppColors.white,
             borderColor: AppColors.primary,
@@ -149,7 +148,6 @@ class ReportTabScreenState extends State<ReportTabScreen> {
           CustomButton(
             onButtonPressed: () {},
             buttonText: AppStrings.shareReport,
-            btnHeight: 54,
             borderRadius: 28,
             backgroundColor: AppColors.primary,
             textColor: AppColors.white,

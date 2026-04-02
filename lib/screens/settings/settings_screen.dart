@@ -1,7 +1,13 @@
 import "package:flutter_screenutil/flutter_screenutil.dart";
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:kharcha/components/common_button.dart';
 import 'package:kharcha/components/common_text.dart';
+import 'package:kharcha/screens/auth/bloc/auth_bloc.dart';
+import 'package:kharcha/screens/auth/bloc/auth_event.dart';
+import 'package:kharcha/screens/auth/bloc/auth_state.dart';
 import 'package:kharcha/screens/auth/signup_screen.dart';
 import 'package:kharcha/screens/splash/splash_screen.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
@@ -21,6 +27,65 @@ class SettingsTabScreenState extends State<SettingsTabScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+    final String normalizedEmail =
+        (currentUser?.email ?? '').trim().toLowerCase();
+
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (BuildContext context, AuthState state) {
+        if (!context.mounted) {
+          return;
+        }
+        final bool isLoggedOut = FirebaseAuth.instance.currentUser == null;
+        if (isLoggedOut) {
+          callNextScreenAndClearStack(context, const SplashScreen());
+        }
+      },
+      child: normalizedEmail.isEmpty
+          ? _buildSettingsUI(
+              context,
+              displayName: currentUser?.displayName ?? 'User',
+              email: currentUser?.email ?? '',
+              photoUrl: null,
+            )
+          : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(normalizedEmail)
+                  .snapshots(),
+              builder: (
+                BuildContext context,
+                AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
+              ) {
+                final Map<String, dynamic>? data = snapshot.data?.data();
+                final String displayName =
+                    (data?['fullName'] as String?)?.trim().isNotEmpty == true
+                    ? (data?['fullName'] as String).trim()
+                    : (currentUser?.displayName ?? 'User');
+                final String email =
+                    (data?['email'] as String?)?.trim().isNotEmpty == true
+                    ? (data?['email'] as String).trim()
+                    : (currentUser?.email ?? '');
+                final String photoUrlRaw =
+                    (data?['photoUrl'] as String?)?.trim() ?? '';
+
+                return _buildSettingsUI(
+                  context,
+                  displayName: displayName,
+                  email: email,
+                  photoUrl: photoUrlRaw.isEmpty ? null : photoUrlRaw,
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildSettingsUI(
+    BuildContext context, {
+    required String displayName,
+    required String email,
+    required String? photoUrl,
+  }) {
     return SafeArea(
       top: true,
       bottom: false,
@@ -47,10 +112,25 @@ class SettingsTabScreenState extends State<SettingsTabScreen> {
                       ),
                       padding: EdgeInsets.all(6),
                       child: ClipOval(
-                        child: Image.asset(
-                          AppImage.profilePlaceHolder,
-                          fit: BoxFit.cover,
-                        ),
+                        child: photoUrl == null
+                            ? Image.asset(
+                                AppImage.profilePlaceHolder,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.network(
+                                photoUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (
+                                  BuildContext context,
+                                  Object error,
+                                  StackTrace? stackTrace,
+                                ) {
+                                  return Image.asset(
+                                    AppImage.profilePlaceHolder,
+                                    fit: BoxFit.cover,
+                                  );
+                                },
+                              ),
                       ),
                     ),
                     Positioned(
@@ -60,10 +140,10 @@ class SettingsTabScreenState extends State<SettingsTabScreen> {
                         onTap: () {
                           callNextScreen(
                             context,
-                            const SignupScreen(
+                            SignupScreen(
                               isEditMode: true,
-                              initialName: 'Harsh Parmar',
-                              initialEmail: 'alex@kharcha.app',
+                              initialName: displayName,
+                              initialEmail: email,
                             ),
                           );
                         },
@@ -100,7 +180,7 @@ class SettingsTabScreenState extends State<SettingsTabScreen> {
             sb(14),
             Center(
               child: CommonText(
-                'Harsh Parmar',
+                displayName,
                 style: TextStyle(
                   fontSize: 24.sp,
                   fontWeight: FontWeight.w800,
@@ -117,10 +197,10 @@ class SettingsTabScreenState extends State<SettingsTabScreen> {
               onTap: () {
                 callNextScreen(
                   context,
-                  const SignupScreen(
+                  SignupScreen(
                     isEditMode: true,
-                    initialName: 'Harsh Parmar',
-                    initialEmail: 'alex@kharcha.app',
+                    initialName: displayName,
+                    initialEmail: email,
                   ),
                 );
               },
@@ -193,7 +273,7 @@ class SettingsTabScreenState extends State<SettingsTabScreen> {
             sb(42),
             CustomButton(
               onButtonPressed: () {
-                callNextScreenAndClearStack(context, SplashScreen());
+                context.read<AuthBloc>().add(const AuthLogoutRequested());
               },
               buttonText: AppStrings.logout,
               backgroundColor: AppColors.red,

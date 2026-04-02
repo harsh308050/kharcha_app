@@ -2,14 +2,14 @@ import "package:flutter_screenutil/flutter_screenutil.dart";
 import 'package:flutter/material.dart';
 import 'package:kharcha/components/common_button.dart';
 import 'package:kharcha/components/common_text.dart';
-import 'package:kharcha/screens/ledger/ledger_transaction_data.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_icons.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
+import 'package:kharcha/utils/sms/sms_transaction.dart';
 import 'package:kharcha/utils/my_cm.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
-  final LedgerTransactionData transaction;
+  final SmsTransaction transaction;
 
   const TransactionDetailScreen({super.key, required this.transaction});
 
@@ -44,9 +44,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _merchant = widget.transaction.title;
-    _category = widget.transaction.category;
-    _note = widget.transaction.note;
+    _merchant = widget.transaction.displaySenderLabel;
+    _category = widget.transaction.isDebit ? 'Other' : 'Income';
+    _note = widget.transaction.method.trim().isEmpty
+        ? 'Imported from SMS'
+        : 'Imported via ${widget.transaction.method.trim()} SMS';
 
     _merchantController = TextEditingController(text: _merchant);
     _noteController = TextEditingController(text: _note);
@@ -61,13 +63,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final _AmountParts amountParts = _splitAmount(widget.transaction.amount);
+    final _AmountParts amountParts =
+        _splitAmount(widget.transaction.formattedSignedAmount);
 
     return Scaffold(
       backgroundColor: AppColors.whiteBg,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 108),
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -108,7 +111,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                       Icon(Icons.star, size: 14, color: AppColors.primary),
                       sbw(6),
                       CommonText(
-                        widget.transaction.trailingText,
+                        _transactionTagLabel(),
                         style: TextStyle(
                           fontSize: 11.sp,
                           letterSpacing: 1.2,
@@ -148,7 +151,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
               sb(4),
               Center(
                 child: CommonText(
-                  widget.transaction.dateTimeText,
+                  widget.transaction.formattedDateTime,
                   style: TextStyle(
                     fontSize: 12.sp,
                     fontWeight: FontWeight.w600,
@@ -236,40 +239,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 ),
               ),
               sb(18),
-              Material(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(18),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () {},
-                  child: Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Color(0xFFF0F2F3),
-                          child: Icon(Icons.call_split, color: Color(0xFF5B6876), size: 18),
-                        ),
-                        SizedBox(width: 12.w),
-                        Expanded(
-                          child: CommonText(
-                            'Split transaction',
-                            style: TextStyle(
-                              fontSize: 15.sp,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF252A2E),
-                            ),
-                          ),
-                        ),
-                        Icon(Icons.chevron_right_rounded, color: Color(0xFF9AA2AC), size: 22),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              sb(18),
               InkWell(
                 onTap: () {
                   setState(() {
@@ -318,7 +287,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: CommonText(
-                    widget.transaction.rawSms,
+                    widget.transaction.rawMessage,
                     style: TextStyle(
                       fontSize: 13.sp,
                       height: 1.45,
@@ -334,7 +303,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 onButtonPressed: () {},
                 buttonText: 'Delete Transaction',
                 borderColor: AppColors.red,
-
                 borderRadius: 16,
                 backgroundColor: AppColors.white,
                 borderWidth: 1,
@@ -393,6 +361,15 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       main: value.substring(0, dotIndex),
       decimal: value.substring(dotIndex),
     );
+  }
+
+  String _transactionTagLabel() {
+    if (!widget.transaction.isDebit) {
+      return AppStrings.salary;
+    }
+
+    final String method = widget.transaction.method.trim().toUpperCase();
+    return method.isEmpty ? AppStrings.tagNow : method;
   }
 }
 
@@ -536,7 +513,7 @@ class _CategorySelector extends StatelessWidget {
             ),
           );
         },
-        separatorBuilder: (_, __) => sbw(8),
+        separatorBuilder: (BuildContext _, int index) => sbw(8),
         itemCount: options.length,
       ),
     );

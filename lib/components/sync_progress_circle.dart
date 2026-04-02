@@ -109,7 +109,7 @@ class _SyncProgressCircleState extends State<SyncProgressCircle>
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.max,
                   children: [
                     RotationTransition(
                       turns: _rotationController,
@@ -120,12 +120,17 @@ class _SyncProgressCircleState extends State<SyncProgressCircle>
                       ),
                     ),
                     SizedBox(width: 10),
-                    CommonText(
-                      widget.statusText,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: widget.statusTextColor,
+                    Flexible(
+                      child: CommonText(
+                        widget.statusText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: widget.statusTextColor,
+                        ),
                       ),
                     ),
                   ],

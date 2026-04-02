@@ -1,10 +1,15 @@
 import "package:flutter_screenutil/flutter_screenutil.dart";
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kharcha/bloc/sms/sms_bloc.dart';
+import 'package:kharcha/bloc/sms/sms_event.dart';
+import 'package:kharcha/bloc/sms/sms_state.dart';
 import 'package:kharcha/components/common_text.dart';
-import 'package:kharcha/screens/ledger/ledger_transaction_data.dart';
 import 'package:kharcha/screens/ledger/transaction_detail_screen.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
+import 'package:kharcha/utils/anim/marquee_text.dart';
+import 'package:kharcha/utils/sms/sms_transaction.dart';
 import 'package:kharcha/utils/my_cm.dart';
 
 class LedgerTabScreen extends StatefulWidget {
@@ -15,192 +20,731 @@ class LedgerTabScreen extends StatefulWidget {
 }
 
 class LedgerTabScreenState extends State<LedgerTabScreen> {
-  static const List<LedgerTransactionData>
-  _todayTransactions = <LedgerTransactionData>[
-    LedgerTransactionData(
-      title: 'Whole Foods Market',
-      subtitle: 'HDFC BANK • 2H AGO',
-      amount: '-\₹84.20',
-      amountColor: Color(0xFF1F2529),
-      trailingText: AppStrings.tagNow,
-      trailingTextColor: AppColors.primary,
-      trailingBackground: AppColors.transparent,
-      icon: Icons.shopping_bag_outlined,
-      iconColor: Color(0xFF52606D),
-      iconBackground: Color(0xFFE9EAEB),
-      showAccent: true,
-      category: 'Groceries',
-      note: 'Weekly groceries and essentials',
-      dateTimeText: 'Oct 24, 2023 • 11:42 AM',
-      rawSms:
-          'Txn of INR 84.20 on HDFC Bank Card XX1234 at Whole Foods on 24-Oct-23. Avl Bal: INR 42,400.32.',
-    ),
-    LedgerTransactionData(
-      title: 'Blue Tokai Coffee',
-      subtitle: 'ICICI BANK • 5H AGO',
-      amount: '-\₹12.50',
-      amountColor: Color(0xFF1F2529),
-      trailingText: AppStrings.dining,
-      trailingTextColor: Color(0xFF5C6470),
-      trailingBackground: Color(0xFFE9ECEF),
-      icon: Icons.restaurant,
-      iconColor: AppColors.primary,
-      iconBackground: Color(0xFFD6E6E0),
-      showAccent: false,
-      category: 'Food & Drinks',
-      note: 'Coffee with team after standup',
-      dateTimeText: 'Oct 24, 2023 • 09:35 AM',
-      rawSms:
-          'Txn of INR 12.50 on ICICI Bank Card XX9981 at BlueTokai on 24-Oct-23. Avl Bal: INR 18,290.11.',
-    ),
+  static const String _allMethodFilter = 'ALL';
+
+  static const List<String> _baseMethodFilters = <String>[
+    _allMethodFilter,
+    'UPI',
+    'NEFT',
+    'IMPS',
+    'RTGS',
+    'CARD',
+    'WALLET',
+    'OTHER',
   ];
 
-  static const List<LedgerTransactionData>
-  _yesterdayTransactions = <LedgerTransactionData>[
-    LedgerTransactionData(
-      title: 'Tata Power Bills',
-      subtitle: 'SBI CARD • 1D AGO',
-      amount: '-\₹156.00',
-      amountColor: Color(0xFF1F2529),
-      trailingText: AppStrings.tagNow,
-      trailingTextColor: AppColors.primary,
-      trailingBackground: AppColors.transparent,
-      icon: Icons.electric_bolt,
-      iconColor: Color(0xFF52606D),
-      iconBackground: Color(0xFFE9EAEB),
-      showAccent: true,
-      category: 'Utilities',
-      note: 'Monthly electricity bill payment',
-      dateTimeText: 'Oct 23, 2023 • 07:10 PM',
-      rawSms:
-          'Txn of INR 156.00 on SBI Card XX2110 at TataPower on 23-Oct-23. Avl Bal: INR 9,521.67.',
-    ),
-    LedgerTransactionData(
-      title: 'Payroll Deposit',
-      subtitle: 'HDFC BANK • 1D AGO',
-      amount: '+\₹4,200.00',
-      amountColor: AppColors.primary,
-      trailingText: AppStrings.salary,
-      trailingTextColor: AppColors.primary,
-      trailingBackground: Color(0xFFD8EBE4),
-      icon: Icons.account_balance_wallet_outlined,
-      iconColor: AppColors.primary,
-      iconBackground: Color(0xFFD6E6E0),
-      showAccent: false,
-      category: 'Income',
-      note: 'Salary credited for October',
-      dateTimeText: 'Oct 23, 2023 • 10:01 AM',
-      rawSms:
-          'Salary credit of INR 4,200.00 in HDFC A/C XX1234 on 23-Oct-23. Avl Bal: INR 52,774.92.',
-    ),
-    LedgerTransactionData(
-      title: 'Uber India',
-      subtitle: 'ICICI BANK • 1D AGO',
-      amount: '-\₹14.20',
-      amountColor: Color(0xFF1F2529),
-      trailingText: AppStrings.transport,
-      trailingTextColor: Color(0xFF5C6470),
-      trailingBackground: Color(0xFFE9ECEF),
-      icon: Icons.directions_car_filled_outlined,
-      iconColor: Color(0xFF52606D),
-      iconBackground: Color(0xFFE9EAEB),
-      showAccent: false,
-      category: 'Transport',
-      note: 'Ride from office to home',
-      dateTimeText: 'Oct 23, 2023 • 08:46 PM',
-      rawSms:
-          'Txn of INR 14.20 on ICICI Bank Card XX9981 at Uber on 23-Oct-23. Avl Bal: INR 18,201.94.',
-    ),
-  ];
+  static const int _pageSize = 25;
 
-  int _selectedFilterIndex = 0;
+  final ScrollController _scrollController = ScrollController();
+  List<SmsTransaction> _transactions = const <SmsTransaction>[];
+  bool _isInitialLoading = true;
+  bool _isPermissionDenied = false;
+  bool _isLoadingMore = false;
+  String? _ledgerError;
+  int _sourceFingerprint = -1;
+  int _visibleTransactionsLimit = _pageSize;
+  int _lastFilteredCount = 0;
+
+  _LedgerTimeFilter _selectedTimeFilter = _LedgerTimeFilter.thisYear;
+  _LedgerDirectionFilter _selectedDirectionFilter =
+      _LedgerDirectionFilter.all;
+  String _selectedMethodFilter = _allMethodFilter;
 
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CommonText(
-            AppStrings.activity,
-            style: TextStyle(
-              fontSize: 14.sp,
-              letterSpacing: 2.0,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF6C727A),
-            ),
-          ),
-          sb(4),
-          CommonText(
-            AppStrings.transactions,
-            style: TextStyle(
-              fontSize: 36.sp,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1B2023),
-            ),
-          ),
-          sb(12),
-          Row(
-            children: List<Widget>.generate(_filters.length, (int index) {
-              final bool isSelected = index == _selectedFilterIndex;
-              return Padding(
-                padding: EdgeInsets.only(
-                  right: index == _filters.length - 1 ? 0 : 10,
-                ),
-                child: _FilterPill(
-                  label: _filters[index],
-                  isSelected: isSelected,
-                  showDropDown: index == 0,
-                  onTap: () {
-                    setState(() {
-                      _selectedFilterIndex = index;
-                    });
-                  },
-                ),
-              );
-            }),
-          ),
-          sb(18),
-          const _LedgerSectionTitle(title: AppStrings.today),
-          sb(10),
-          ..._todayTransactions.map(
-            (item) => Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: _TransactionTile(data: item),
-            ),
-          ),
-          sb(10),
-          const _LedgerSectionTitle(title: AppStrings.yesterday),
-          sb(10),
-          ..._yesterdayTransactions.map(
-            (item) => Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: _TransactionTile(data: item),
-            ),
-          ),
-        ],
-      ),
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+
+    final SmsState initialSmsState = context.read<SmsBloc>().state;
+    if (initialSmsState is SmsLoaded) {
+      _sourceFingerprint = _calculateSourceFingerprint(
+        initialSmsState.transactions,
+      );
+      _transactions = _mapKnownTransactions(initialSmsState.transactions);
+      _isInitialLoading = false;
+      _isPermissionDenied = false;
+      _isLoadingMore = false;
+      _ledgerError = null;
+      _visibleTransactionsLimit = _pageSize;
+      _lastFilteredCount = _transactions.length;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      _consumeSmsState(
+        context.read<SmsBloc>().state,
+        triggerFetchIfNeeded: true,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients || _isLoadingMore) {
+      return;
+    }
+
+    if (_visibleTransactionsLimit >= _lastFilteredCount) {
+      return;
+    }
+
+    final ScrollPosition position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 220) {
+      _loadMoreTransactions();
+    }
+  }
+
+  void _loadMoreTransactions() {
+    if (_isLoadingMore || _visibleTransactionsLimit >= _lastFilteredCount) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    Future<void>.delayed(const Duration(milliseconds: 120), () {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _visibleTransactionsLimit =
+            (_visibleTransactionsLimit + _pageSize).clamp(0, _lastFilteredCount);
+        _isLoadingMore = false;
+      });
+    });
+  }
+
+  Future<void> _onRefresh() async {
+    final SmsBloc smsBloc = context.read<SmsBloc>();
+    smsBloc.add(const SmsFetchRequested());
+    await smsBloc.stream.firstWhere(
+      (SmsState state) =>
+          state is SmsLoaded ||
+          state is SmsPermissionDenied ||
+          state is SmsFailure,
     );
   }
 
-  List<String> get _filters => <String>[
-    AppStrings.date,
-    AppStrings.today,
-    AppStrings.thisWeek,
-  ];
+  @override
+  Widget build(BuildContext context) {
+    return BlocConsumer<SmsBloc, SmsState>(
+      listener: (BuildContext context, SmsState state) {
+        _consumeSmsState(state);
+      },
+      builder: (BuildContext context, SmsState smsState) {
+          final List<String> methodFilters = _buildMethodFilters(
+            _transactions,
+          );
+          if (!methodFilters.contains(_selectedMethodFilter)) {
+            _selectedMethodFilter = _allMethodFilter;
+          }
+
+          final List<SmsTransaction> filtered = _applyFilter(_transactions);
+          _lastFilteredCount = filtered.length;
+          final int visibleCount = _visibleTransactionsLimit.clamp(0, _lastFilteredCount);
+          final List<SmsTransaction> visibleFiltered =
+              filtered.take(visibleCount).toList();
+          final bool hasMoreToLoad = visibleCount < _lastFilteredCount;
+          final List<_LedgerListEntry> listEntries =
+              _buildListEntries(visibleFiltered);
+
+          return RefreshIndicator(
+            onRefresh: _onRefresh,
+            backgroundColor: AppColors.white,
+            color: AppColors.primary,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CommonText(
+                          AppStrings.activity,
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            letterSpacing: 2.0,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF6C727A),
+                          ),
+                        ),
+                        sb(4),
+                        CommonText(
+                          AppStrings.transactions,
+                          style: TextStyle(
+                            fontSize: 36.sp,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1B2023),
+                          ),
+                        ),
+                        sb(12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _FilterDropdown<_LedgerTimeFilter>(
+                                value: _selectedTimeFilter,
+                                items: _LedgerTimeFilter.values,
+                                itemLabelBuilder: (
+                                  _LedgerTimeFilter value,
+                                ) => value.label,
+                                onSelected: (
+                                  _LedgerTimeFilter selected,
+                                ) {
+                                  setState(() {
+                                    _selectedTimeFilter = selected;
+                                    _visibleTransactionsLimit = _pageSize;
+                                    _isLoadingMore = false;
+                                  });
+                                },
+                              ),
+                            ),
+                            sbw(10),
+                            Expanded(
+                              child: _FilterDropdown<_LedgerDirectionFilter>(
+                                value: _selectedDirectionFilter,
+                                items: _LedgerDirectionFilter.values,
+                                itemLabelBuilder: (
+                                  _LedgerDirectionFilter value,
+                                ) => value.label,
+                                onSelected: (
+                                  _LedgerDirectionFilter selected,
+                                ) {
+                                  setState(() {
+                                    _selectedDirectionFilter = selected;
+                                    _visibleTransactionsLimit = _pageSize;
+                                    _isLoadingMore = false;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        sb(12),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: List<Widget>.generate(
+                              methodFilters.length,
+                              (int index) {
+                                final String method = methodFilters[index];
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    right: index == methodFilters.length - 1
+                                        ? 0
+                                        : 8,
+                                  ),
+                                  child: _MethodChip(
+                                    label: _methodLabel(method),
+                                    isSelected: _selectedMethodFilter == method,
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedMethodFilter = method;
+                                        _visibleTransactionsLimit = _pageSize;
+                                        _isLoadingMore = false;
+                                      });
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(child: sb(18)),
+                ..._buildBodySlivers(
+                  isLoading: _isInitialLoading && _transactions.isEmpty,
+                  isPermissionDenied: _isPermissionDenied,
+                  errorMessage: _ledgerError,
+                  listEntries: listEntries,
+                ),
+                SliverToBoxAdapter(
+                  child: _isLoadingMore
+                      ? Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        )
+                      : SizedBox(height: hasMoreToLoad ? 28.h : 18.h),
+                ),
+              ],
+            ),
+          );
+      },
+    );
+  }
+
+  void _consumeSmsState(
+    SmsState smsState, {
+    bool triggerFetchIfNeeded = false,
+  }) {
+    if (smsState is SmsInitial) {
+      if (triggerFetchIfNeeded) {
+        context.read<SmsBloc>().add(const SmsFetchRequested());
+      }
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = _transactions.isEmpty;
+          _isPermissionDenied = false;
+          _ledgerError = null;
+        });
+      }
+      return;
+    }
+
+    if (smsState is SmsLoading) {
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = _transactions.isEmpty;
+          _isPermissionDenied = false;
+          _ledgerError = null;
+        });
+      }
+      return;
+    }
+
+    if (smsState is SmsPermissionDenied) {
+      if (mounted) {
+        setState(() {
+          _transactions = const <SmsTransaction>[];
+          _isInitialLoading = false;
+          _isPermissionDenied = true;
+          _isLoadingMore = false;
+          _ledgerError = null;
+          _visibleTransactionsLimit = _pageSize;
+          _lastFilteredCount = 0;
+        });
+      }
+      return;
+    }
+
+    if (smsState is SmsFailure) {
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _isPermissionDenied = false;
+          _isLoadingMore = false;
+          _ledgerError = smsState.message;
+        });
+      }
+      return;
+    }
+
+    if (smsState is SmsLoaded) {
+      final int fingerprint = _calculateSourceFingerprint(
+        smsState.transactions,
+      );
+      if (_sourceFingerprint != fingerprint || _transactions.isEmpty) {
+        final List<SmsTransaction> knownTransactions = _mapKnownTransactions(
+          smsState.transactions,
+        );
+
+        if (mounted) {
+          setState(() {
+            _sourceFingerprint = fingerprint;
+            _transactions = knownTransactions;
+            _isInitialLoading = false;
+            _isPermissionDenied = false;
+            _isLoadingMore = false;
+            _ledgerError = null;
+            _visibleTransactionsLimit = _pageSize;
+            _lastFilteredCount = knownTransactions.length;
+          });
+        }
+      }
+    }
+  }
+
+  int _calculateSourceFingerprint(List<SmsTransaction> transactions) {
+    int hash = transactions.length;
+    for (final SmsTransaction transaction in transactions) {
+      hash = 31 * hash + transaction.rawMessage.hashCode;
+      hash = 31 * hash + transaction.senderId.hashCode;
+      hash = 31 * hash + transaction.amount.hashCode;
+    }
+    return hash;
+  }
+
+  List<SmsTransaction> _mapKnownTransactions(
+    List<SmsTransaction> transactions,
+  ) {
+    final List<SmsTransaction> known = transactions
+        .where((SmsTransaction transaction) => transaction.isKnownTransaction)
+        .toList();
+    known.sort(
+      (SmsTransaction a, SmsTransaction b) =>
+          b.transactionDate.compareTo(a.transactionDate),
+    );
+    return known;
+  }
+
+  List<Widget> _buildBodySlivers(
+    {
+    required bool isLoading,
+    required bool isPermissionDenied,
+    required String? errorMessage,
+    required List<_LedgerListEntry> listEntries,
+  }
+  ) {
+    if (isLoading) {
+      return <Widget>[
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(24, 40, 24, 16),
+            child: Column(
+              mainAxisAlignment: .center,
+              children: [
+                CircularProgressIndicator(color: AppColors.primary),
+                sb(12),
+                CommonText(
+                  'Scanning messages...',
+                  style: TextStyle(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF54606D),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    if (isPermissionDenied) {
+      return <Widget>[
+        SliverToBoxAdapter(
+          child: _StatusCard(
+            title: 'SMS permission needed',
+            description:
+                'Grant SMS access to load transactions automatically in your ledger.',
+            actionLabel: AppStrings.allowSMSAccess,
+            onActionPressed: () {
+              context.read<SmsBloc>().add(const SmsFetchRequested());
+            },
+          ),
+        ),
+      ];
+    }
+
+    if (errorMessage != null && listEntries.isEmpty) {
+      return <Widget>[
+        SliverToBoxAdapter(
+          child: _StatusCard(
+            title: 'Unable to load transactions',
+            description: errorMessage,
+            actionLabel: 'Retry',
+            onActionPressed: () {
+              context.read<SmsBloc>().add(const SmsFetchRequested());
+            },
+          ),
+        ),
+      ];
+    }
+
+    if (listEntries.isEmpty) {
+      return <Widget>[
+        SliverToBoxAdapter(
+          child: _StatusCard(
+            title: 'No transactions found',
+            description:
+                'Try a different filter or pull down to refresh your SMS ledger.',
+          ),
+        ),
+      ];
+    }
+
+    return <Widget>[
+      SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: 20),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
+            final _LedgerListEntry entry = listEntries[index];
+            if (entry.isSection) {
+              return Padding(
+                padding: EdgeInsets.only(
+                  top: index == 0 ? 0 : 8,
+                  bottom: 10,
+                ),
+                child: _LedgerSectionTitle(title: entry.sectionTitle!),
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: _TransactionTile(data: entry.transaction!),
+            );
+          }, childCount: listEntries.length),
+        ),
+      ),
+    ];
+  }
+
+  List<SmsTransaction> _applyFilter(List<SmsTransaction> transactions) {
+    final DateTime now = DateTime.now();
+    final DateTime startOfWeek =
+        DateTime(now.year, now.month, now.day).subtract(
+      Duration(days: now.weekday - 1),
+    );
+    final DateTime endOfWeek = startOfWeek.add(const Duration(days: 7));
+    final DateTime startOfYear = DateTime(now.year, 1, 1);
+    final DateTime nextYear = DateTime(now.year + 1, 1, 1);
+
+    return transactions.where((SmsTransaction item) {
+      final DateTime dateOnly = DateTime(
+        item.transactionDate.year,
+        item.transactionDate.month,
+        item.transactionDate.day,
+      );
+
+      final bool matchesTimeFilter = switch (_selectedTimeFilter) {
+        _LedgerTimeFilter.allTime => true,
+        _LedgerTimeFilter.thisYear =>
+          !dateOnly.isBefore(startOfYear) && dateOnly.isBefore(nextYear),
+        _LedgerTimeFilter.thisWeek =>
+          !dateOnly.isBefore(startOfWeek) && dateOnly.isBefore(endOfWeek),
+        _LedgerTimeFilter.today => _isSameDay(dateOnly, now),
+      };
+
+      final bool matchesDirectionFilter = switch (_selectedDirectionFilter) {
+        _LedgerDirectionFilter.all => true,
+        _LedgerDirectionFilter.credited => !item.isDebit,
+        _LedgerDirectionFilter.debited => item.isDebit,
+      };
+
+      final bool matchesMethodFilter =
+          _selectedMethodFilter == _allMethodFilter ||
+          _normalizeMethod(item.method) == _selectedMethodFilter;
+
+      return matchesTimeFilter &&
+          matchesDirectionFilter &&
+          matchesMethodFilter;
+    }).toList();
+  }
+
+  List<String> _buildMethodFilters(List<SmsTransaction> transactions) {
+    final Set<String> methods = <String>{..._baseMethodFilters};
+    for (final SmsTransaction item in transactions) {
+      methods.add(_normalizeMethod(item.method));
+    }
+
+    final List<String> ordered = <String>[];
+    for (final String method in _baseMethodFilters) {
+      if (methods.remove(method)) {
+        ordered.add(method);
+      }
+    }
+
+    final List<String> extras = methods.toList()..sort();
+    ordered.addAll(extras);
+    return ordered;
+  }
+
+  String _methodLabel(String method) {
+    return switch (method) {
+      _allMethodFilter => 'All',
+      'RTGS' => 'Bank Transfer',
+      'CARD' => 'Card',
+      'WALLET' => 'Wallet',
+      'OTHER' => 'Other',
+      _ => method,
+    };
+  }
+
+  String _normalizeMethod(String method) {
+    final String normalized = method.trim().toUpperCase();
+    if (normalized.isEmpty) {
+      return 'OTHER';
+    }
+    if (normalized.contains('UPI')) {
+      return 'UPI';
+    }
+    if (normalized.contains('NEFT')) {
+      return 'NEFT';
+    }
+    if (normalized.contains('IMPS')) {
+      return 'IMPS';
+    }
+    if (normalized.contains('RTGS') ||
+        normalized.contains('BANK TRANSFER')) {
+      return 'RTGS';
+    }
+    if (normalized.contains('CARD')) {
+      return 'CARD';
+    }
+    if (normalized.contains('WALLET')) {
+      return 'WALLET';
+    }
+    return 'OTHER';
+  }
+
+  List<_LedgerListEntry> _buildListEntries(List<SmsTransaction> items) {
+    if (items.isEmpty) {
+      return <_LedgerListEntry>[];
+    }
+
+    final List<_LedgerListEntry> entries = <_LedgerListEntry>[];
+    String? currentSection;
+
+    for (final SmsTransaction item in items) {
+      final String section = _sectionTitleForDate(item.transactionDate);
+      if (section != currentSection) {
+        currentSection = section;
+        entries.add(_LedgerListEntry.section(section));
+      }
+      entries.add(_LedgerListEntry.transaction(item));
+    }
+
+    return entries;
+  }
+
+  String _sectionTitleForDate(DateTime date) {
+    final DateTime now = DateTime.now();
+    final DateTime today = DateTime(now.year, now.month, now.day);
+    final DateTime target = DateTime(date.year, date.month, date.day);
+
+    if (target == today) {
+      return AppStrings.today;
+    }
+
+    if (target == today.subtract(const Duration(days: 1))) {
+      return AppStrings.yesterday;
+    }
+
+    return _formatDate(date);
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  String _formatDate(DateTime date) {
+    const List<String> monthNames = <String>[
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final String month = monthNames[(date.month - 1).clamp(0, 11)];
+    return '$month ${date.day}, ${date.year}';
+  }
 }
 
-class _FilterPill extends StatelessWidget {
+class _FilterDropdown<T> extends StatelessWidget {
+  final T value;
+  final List<T> items;
+  final String Function(T value) itemLabelBuilder;
+  final ValueChanged<T> onSelected;
+
+  const _FilterDropdown({
+    required this.value,
+    required this.items,
+    required this.itemLabelBuilder,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<T>(
+      initialValue: value,
+      onSelected: onSelected,
+      color: AppColors.white,
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      itemBuilder: (BuildContext context) {
+        return items
+            .map(
+              (T option) => PopupMenuItem<T>(
+                value: option,
+                child: CommonText(
+                  itemLabelBuilder(option),
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: option == value
+                        ? AppColors.primary
+                        : AppColors.greyDark,
+                  ),
+                ),
+              ),
+            )
+            .toList();
+      },
+      child: Container(
+        height: 40,
+        padding: EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: CommonText(
+                itemLabelBuilder(value),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.white,
+                ),
+              ),
+            ),
+            sbw(4),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: AppColors.white,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MethodChip extends StatelessWidget {
   final String label;
   final bool isSelected;
-  final bool showDropDown;
   final VoidCallback onTap;
 
-  const _FilterPill({
+  const _MethodChip({
     required this.label,
     required this.isSelected,
-    required this.showDropDown,
     required this.onTap,
   });
 
@@ -209,34 +753,57 @@ class _FilterPill extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 40,
-        padding: EdgeInsets.symmetric(horizontal: 18),
+        height: 36,
+        padding: EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primary : const Color(0xFFE8E8E8),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
         ),
-        child: Row(
-          children: [
-            CommonText(
-              label,
-              style: TextStyle(
-                fontSize: 13.sp,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? AppColors.white : AppColors.greyDark,
-              ),
-            ),
-            if (showDropDown) ...[
-              sbw(6),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: isSelected ? AppColors.white : AppColors.greyDark,
-              ),
-            ],
-          ],
+        alignment: Alignment.center,
+        child: CommonText(
+          label,
+          style: TextStyle(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? AppColors.white : AppColors.greyDark,
+          ),
         ),
       ),
     );
+  }
+}
+
+enum _LedgerTimeFilter {
+  allTime,
+  thisYear,
+  thisWeek,
+  today,
+}
+
+extension _LedgerTimeFilterLabel on _LedgerTimeFilter {
+  String get label {
+    return switch (this) {
+      _LedgerTimeFilter.allTime => 'All Time',
+      _LedgerTimeFilter.thisYear => AppStrings.thisYear,
+      _LedgerTimeFilter.thisWeek => AppStrings.thisWeek,
+      _LedgerTimeFilter.today => AppStrings.today,
+    };
+  }
+}
+
+enum _LedgerDirectionFilter {
+  all,
+  credited,
+  debited,
+}
+
+extension _LedgerDirectionFilterLabel on _LedgerDirectionFilter {
+  String get label {
+    return switch (this) {
+      _LedgerDirectionFilter.all => AppStrings.all,
+      _LedgerDirectionFilter.credited => 'Credited',
+      _LedgerDirectionFilter.debited => 'Debited',
+    };
   }
 }
 
@@ -263,12 +830,111 @@ class _LedgerSectionTitle extends StatelessWidget {
 }
 
 class _TransactionTile extends StatelessWidget {
-  final LedgerTransactionData data;
+  final SmsTransaction data;
 
   const _TransactionTile({required this.data});
 
+  _TileVisual _tileVisual() {
+    final String lowerTitle = data.displaySenderLabel.toLowerCase();
+    final String normalizedMethod = data.method.trim().toUpperCase();
+
+    if (!data.isDebit) {
+      return const _TileVisual(
+        icon: Icons.account_balance_wallet_outlined,
+        iconColor: AppColors.primary,
+        iconBackground: Color(0xFFD6E6E0),
+        amountColor: AppColors.primary,
+        trailingText: AppStrings.salary,
+        trailingTextColor: AppColors.primary,
+        trailingBackground: Color(0xFFD8EBE4),
+        showAccent: false,
+      );
+    }
+
+    IconData icon = Icons.shopping_bag_outlined;
+    Color iconColor = Color(0xFF52606D);
+
+    if (lowerTitle.contains('uber') ||
+        lowerTitle.contains('ola') ||
+        lowerTitle.contains('transport')) {
+      icon = Icons.directions_car_filled_outlined;
+    } else if (lowerTitle.contains('food') ||
+        lowerTitle.contains('restaurant') ||
+        lowerTitle.contains('cafe') ||
+        lowerTitle.contains('swiggy') ||
+        lowerTitle.contains('zomato')) {
+      icon = Icons.restaurant;
+      iconColor = AppColors.primary;
+    } else if (lowerTitle.contains('power') ||
+        lowerTitle.contains('electric') ||
+        lowerTitle.contains('bill')) {
+      icon = Icons.electric_bolt;
+    }
+
+    return _TileVisual(
+      icon: icon,
+      iconColor: iconColor,
+      iconBackground: Color(0xFFE9EAEB),
+      amountColor: Color(0xFF1F2529),
+      trailingText: normalizedMethod.isEmpty ? AppStrings.tagNow : normalizedMethod,
+      trailingTextColor: AppColors.primary,
+      trailingBackground: AppColors.transparent,
+      showAccent: true,
+    );
+  }
+
+  _DirectionChipStyle _directionChipStyle() {
+    if (data.isDebit) {
+      return const _DirectionChipStyle(
+        label: 'Debited',
+        textColor: Color(0xFFB42318),
+        backgroundColor: Color(0xFFFEE4E2),
+      );
+    }
+
+    return const _DirectionChipStyle(
+      label: 'Credited',
+      textColor: Color(0xFF027A48),
+      backgroundColor: Color(0xFFD1FADF),
+    );
+  }
+
+  String _relativeTime(DateTime date) {
+    final Duration diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 60) {
+      final int minutes = diff.inMinutes <= 0 ? 1 : diff.inMinutes;
+      return '${minutes}M AGO';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours}H AGO';
+    }
+    if (diff.inDays < 7) {
+      return '${diff.inDays}D AGO';
+    }
+
+    const List<String> shortMonths = <String>[
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+    final String month = shortMonths[(date.month - 1).clamp(0, 11)];
+    return '${date.day} $month';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final _TileVisual visual = _tileVisual();
+    final _DirectionChipStyle directionChip = _directionChipStyle();
+
     return GestureDetector(
       onTap: () {
         callNextScreen(context, TransactionDetailScreen(transaction: data));
@@ -277,95 +943,241 @@ class _TransactionTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(22),
+          border: visual.showAccent
+              ? Border(left: BorderSide(width: 4, color: AppColors.yellow))
+              : null,
         ),
         clipBehavior: Clip.antiAlias,
-        child: IntrinsicHeight(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(12, 14, 14, 14),
           child: Row(
             children: [
-              data.showAccent
-                  ? Container(width: 4, color: AppColors.yellow)
-                  : SizedBox(width: 4.w),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: visual.iconBackground,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(visual.icon, color: visual.iconColor, size: 24),
+              ),
+              sbw(12),
               Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(12, 14, 14, 14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: data.iconBackground,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(data.icon, color: data.iconColor, size: 24),
-                      ),
-                      sbw(12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            CommonText(
-                              data.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 16.sp,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1F2427),
-                              ),
-                            ),
-                            sb(2),
-                            CommonText(
-                              data.subtitle,
-                              style: TextStyle(
-                                fontSize: 11.sp,
-                                letterSpacing: 1.0,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF55657A),
-                              ),
-                            ),
-                          ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: 22,
+                     child: MarqueePlus(
+                        text: data.displaySenderLabel,
+                        initialDelay: Duration(seconds: 2),
+                        velocity: 25,
+                        pauseAfterRound: Duration(milliseconds: 900),
+                        style: TextStyle(
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1F2427),
                         ),
                       ),
-                      sbw(10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          CommonText(
-                            data.amount,
+                    ),
+                    sb(6),
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: directionChip.backgroundColor,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: CommonText(
+                            directionChip.label,
                             style: TextStyle(
-                              fontSize: 18.sp,
+                              fontSize: 10.sp,
                               fontWeight: FontWeight.w700,
-                              color: data.amountColor,
+                              letterSpacing: 0.2,
+                              color: directionChip.textColor,
                             ),
                           ),
-                          sb(4),
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: data.trailingBackground,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: CommonText(
-                              data.trailingText,
-                              style: TextStyle(
-                                fontSize: 10.sp,
-                                fontWeight: FontWeight.w700,
-                                color: data.trailingTextColor,
-                              ),
+                        ),
+                        sbw(8),
+                        Flexible(
+                          child: CommonText(
+                            _relativeTime(data.transactionDate),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.sp,
+                              letterSpacing: 0.8,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF55657A),
                             ),
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              sbw(10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  CommonText(
+                    data.formattedSignedAmount,
+                    style: TextStyle(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.w700,
+                      color: visual.amountColor,
+                    ),
+                  ),
+                  sb(4),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: visual.trailingBackground,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: CommonText(
+                      visual.trailingText,
+                      style: TextStyle(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.w700,
+                        color: visual.trailingTextColor,
                       ),
-                    ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LedgerListEntry {
+  final String? sectionTitle;
+  final SmsTransaction? transaction;
+
+  const _LedgerListEntry.section(this.sectionTitle) : transaction = null;
+
+  const _LedgerListEntry.transaction(this.transaction) : sectionTitle = null;
+
+  bool get isSection => sectionTitle != null;
+}
+
+class _TileVisual {
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBackground;
+  final Color amountColor;
+  final String trailingText;
+  final Color trailingTextColor;
+  final Color trailingBackground;
+  final bool showAccent;
+
+  const _TileVisual({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBackground,
+    required this.amountColor,
+    required this.trailingText,
+    required this.trailingTextColor,
+    required this.trailingBackground,
+    required this.showAccent,
+  });
+}
+
+class _DirectionChipStyle {
+  final String label;
+  final Color textColor;
+  final Color backgroundColor;
+
+  const _DirectionChipStyle({
+    required this.label,
+    required this.textColor,
+    required this.backgroundColor,
+  });
+}
+
+class _StatusCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final String? actionLabel;
+  final VoidCallback? onActionPressed;
+
+  const _StatusCard({
+    required this.title,
+    required this.description,
+    this.actionLabel,
+    this.onActionPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 10),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CommonText(
+              title,
+              style: TextStyle(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1F2529),
+              ),
+            ),
+            sb(8),
+            CommonText(
+              description,
+              style: TextStyle(
+                fontSize: 13.sp,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF5C6470),
+              ),
+            ),
+            if (actionLabel != null && onActionPressed != null) ...[
+              sb(14),
+              SizedBox(
+                height: 42,
+                child: ElevatedButton(
+                  onPressed: onActionPressed,
+                  style: ElevatedButton.styleFrom(
+                    elevation: 0,
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: CommonText(
+                    actionLabel!,
+                    style: TextStyle(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.white,
+                    ),
                   ),
                 ),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );

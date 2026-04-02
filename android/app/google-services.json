@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "124362980344",
+    "project_id": "kharcha-harsh",
+    "storage_bucket": "kharcha-harsh.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:124362980344:android:68710a61d1974ae4a3340d",
+        "android_client_info": {
+          "package_name": "com.harsh.kharcha"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDO6seFLLIyNS5z0heao_t2we_u80AD_Tk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

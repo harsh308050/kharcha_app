@@ -9,6 +9,7 @@ import 'package:kharcha/screens/ledger/ledger_screen.dart';
 import 'package:kharcha/screens/settings/settings_screen.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_icons.dart';
+import 'package:kharcha/utils/constants/app_image.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
 import 'package:kharcha/utils/my_cm.dart';
 
@@ -134,11 +135,21 @@ class _SharedTopBar extends StatelessWidget {
               Container(
                 width: 42,
                 height: 42,
+                padding: EdgeInsets.only(top: 5, bottom: 0, left: 5, right: 5),
                 decoration: const BoxDecoration(
                   color: AppColors.grey,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(AppIcons.person, color: AppColors.greyDark, size: 24),
+                child: ClipOval(
+                
+                  child: Image.asset(
+                    AppImage.profilePlaceHolder,
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                // child: Icon(AppIcons.person, color: AppColors.greyDark, size: 24),
               ),
               Spacer(),
               CommonText(
@@ -205,16 +216,24 @@ class _CustomBottomBar extends StatelessWidget {
                   margin: EdgeInsets.symmetric(horizontal: 2),
                   padding: EdgeInsets.symmetric(vertical: 14, horizontal: 6),
                   decoration: BoxDecoration(
-                    color: isActive ? AppColors.primary : AppColors.transparent,
+                    color: AppColors.transparent, // Remove background from container
                     borderRadius: BorderRadius.circular(26),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        item.icon,
-                        size: 28,
-                        color: isActive ? AppColors.white : AppColors.greyDark,
+                      // Active background only around icon
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isActive ? AppColors.primary : AppColors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Icon(
+                          item.icon,
+                          size: 28,
+                          color: isActive ? AppColors.white : AppColors.greyDark,
+                        ),
                       ),
                       SizedBox(height: 6.h),
                       SizedBox(
@@ -230,7 +249,7 @@ class _CustomBottomBar extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.6,
                             color: isActive
-                                ? AppColors.white
+                                ? AppColors.primary // Active label color matches active theme
                                 : AppColors.greyDark,
                           ),
                         ),
