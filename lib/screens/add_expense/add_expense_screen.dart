@@ -1,8 +1,11 @@
 import "package:flutter_screenutil/flutter_screenutil.dart";
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:kharcha/components/common_button.dart';
 import 'package:kharcha/components/common_number_pad.dart';
 import 'package:kharcha/components/common_text.dart';
+import 'package:kharcha/utils/drive/drive_backup_service.dart';
+import 'package:kharcha/utils/sms/sms_transaction.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/my_cm.dart';
 
@@ -48,6 +51,24 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String _amount = '0';
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
+  bool _isDebit = true; // true = Expense (debit), false = Income (credit)
+  bool _isSavingTransaction = false;
+  bool _isMethodDropdownOpen = false;
+  final DriveBackupService _driveBackupService = DriveBackupService();
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _methodDropdownKey = GlobalKey();
+  final TextEditingController _merchantController = TextEditingController();
+  static const List<String> _methodOptions = <String>[
+    'UPI',
+    'NEFT',
+    'IMPS',
+    'BANK TRANSFER',
+    'CARD',
+    'WALLET',
+    'OTHER',
+  ];
+  String _selectedMethod = 'UPI';
+
   final TextEditingController _noteController = TextEditingController();
 
   @override
@@ -60,8 +81,31 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
+    _merchantController.dispose();
     _noteController.dispose();
     super.dispose();
+  }
+
+  void _toggleMethodDropdown() {
+    setState(() {
+      _isMethodDropdownOpen = !_isMethodDropdownOpen;
+    });
+
+    if (_isMethodDropdownOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final BuildContext? targetContext = _methodDropdownKey.currentContext;
+        if (targetContext == null) {
+          return;
+        }
+        Scrollable.ensureVisible(
+          targetContext,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOut,
+          alignment: 0.18,
+        );
+      });
+    }
   }
 
   void _onKeyTap(String key) {
@@ -206,6 +250,101 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     return '$hour:$minute $period';
   }
 
+  DateTime get _selectedDateTime {
+    return DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
+  }
+
+  Future<void> _saveTransactionToDrive() async {
+    if (_isSavingTransaction) {
+      return;
+    }
+
+    final String merchant = _merchantController.text.trim();
+    final String method = _selectedMethod.trim();
+    final String note = _noteController.text.trim();
+
+    final double? parsedAmount = double.tryParse(_amount);
+
+    if (parsedAmount == null || parsedAmount <= 0) {
+      showSnackBar(context, 'Please enter a valid amount.', AppColors.red);
+      return;
+    }
+
+    if (merchant.isEmpty ||
+        method.isEmpty ||
+        note.isEmpty) {
+      showSnackBar(
+        context,
+        'Please fill all required transaction details.',
+        AppColors.red,
+      );
+      return;
+    }
+
+    setState(() {
+      _isSavingTransaction = true;
+    });
+
+    final DateTime transactionDate = _selectedDateTime;
+    final String selectedCategory = _categories[_selectedCategory].label;
+    final String generatedReference =
+      'manual-${transactionDate.millisecondsSinceEpoch}-${parsedAmount.toStringAsFixed(2).replaceAll('.', '')}';
+    final SmsTransaction transaction = SmsTransaction(
+      rawMessage:
+          '[MANUAL] ${_isDebit ? 'Debit' : 'Credit'} ₹${parsedAmount.toStringAsFixed(2)} via $method on ${_formatDate(_selectedDate)} ${_formatTime(_selectedTime)}. Merchant: $merchant. Note: $note',
+      senderId: merchant,
+      smsDate: transactionDate,
+      type: _isDebit ? SmsTransactionType.debit : SmsTransactionType.credit,
+      method: method,
+      amount: parsedAmount,
+      balance: 0,
+      currency: 'INR',
+      bank: '',
+      account: '',
+      counterparty: merchant,
+      reference: generatedReference,
+      date: _formatDate(_selectedDate),
+      category: selectedCategory,
+      note: note,
+    );
+
+    try {
+      final DriveBackupResult result = await _driveBackupService
+          .backupTransactionsToDrive(<SmsTransaction>[transaction]);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (result.success) {
+        showSnackBar(context, 'Transaction added to Drive.', AppColors.primary);
+        Navigator.of(context).pop(true);
+      } else {
+        showSnackBar(context, result.message, AppColors.red);
+      }
+    } catch (_) {
+      if (mounted) {
+        showSnackBar(
+          context,
+          'Failed to add transaction. Please try again.',
+          AppColors.red,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingTransaction = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -215,6 +354,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             return SingleChildScrollView(
+              controller: _scrollController,
               padding: EdgeInsets.fromLTRB(
                 18,
                 8,
@@ -240,7 +380,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   Expanded(
                     child: Center(
                       child: CommonText(
-                        'Add Expense',
+                        _isDebit ? 'Add Expense' : 'Add Income',
                         style: TextStyle(
                           fontSize: 22.sp,
                           fontWeight: FontWeight.w600,
@@ -252,7 +392,72 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   SizedBox(width: 48.w),
                 ],
               ),
-              sb(30),
+              sb(18),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _isDebit = true;
+                        });
+                      },
+                      child: Container(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: _isDebit ? AppColors.primary : Colors.transparent,
+                              width: _isDebit ? 3 : 0,
+                            ),
+                          ),
+                        ),
+                        child: Center(
+                          child: CommonText(
+                            'Expense',
+                            style: TextStyle(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                              color: _isDebit ? AppColors.primary : Color(0xFF8B98A5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _isDebit = false;
+                        });
+                      },
+                      child: Container(
+                        padding: EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: !_isDebit ? AppColors.primary : Colors.transparent,
+                              width: !_isDebit ? 3 : 0,
+                            ),
+                          ),
+                        ),
+                        child: Center(
+                          child: CommonText(
+                            'Income',
+                            style: TextStyle(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                              color: !_isDebit ? AppColors.primary : Color(0xFF8B98A5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              sb(24),
               Center(
                 child: CommonText(
                   'TOTAL AMOUNT',
@@ -273,7 +478,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     Padding(
                       padding: EdgeInsets.only(bottom: 10),
                       child: CommonText(
-                        '\₹',
+                          '₹',
                         style: TextStyle(
                           fontSize: 22.sp,
                           fontWeight: FontWeight.w700,
@@ -309,8 +514,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
-                  itemCount: _categories.length,
-                  separatorBuilder: (_, __) => sbw(2),
+                    itemCount: _categories.length,
+                      separatorBuilder: (_, _) => sbw(2),
                   itemBuilder: (BuildContext context, int index) {
                     final bool isSelected = _selectedCategory == index;
                     final _CategoryItemData item = _categories[index];
@@ -397,6 +602,31 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 ],
               ),
               sb(12),
+              _FormInputCard(
+                title: 'MERCHANT',
+                hintText: 'Where did you spend it?',
+                controller: _merchantController,
+                icon: Icons.storefront_outlined,
+              ),
+              sb(12),
+              _MethodDropdownCard(
+                key: _methodDropdownKey,
+                title: 'METHOD',
+                value: _selectedMethod,
+                options: _methodOptions,
+                icon: Icons.payments_outlined,
+                isExpanded: _isMethodDropdownOpen,
+                onToggle: _toggleMethodDropdown,
+                onChanged: (String value) {
+                  setState(() {
+                    _selectedMethod = value;
+                    _isMethodDropdownOpen = false;
+                  });
+                },
+              ),
+              sb(12),
+              
+              sb(12),
               _NoteCard(controller: _noteController),
               sb(12),
               SizedBox(
@@ -406,26 +636,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               sb(16),
               SizedBox(
                 width: double.infinity,
-                height: 64,
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.white,
-                    elevation: 2,
-                    shadowColor: AppColors.primary.withValues(alpha: 0.35),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(36),
-                    ),
-                  ),
-                  child: CommonText(
-                    'Add Transaction',
-                    style: TextStyle(
-                      fontSize: 18.sp,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.white,
-                    ),
-                  ),
+                child: CustomButton(
+                  onButtonPressed: _saveTransactionToDrive,
+                  buttonText: 'Add Transaction',
+                  isLoading: _isSavingTransaction,
+                  borderRadius: 36,
+                  backgroundColor: AppColors.primary,
+                  textColor: AppColors.white,
+                  fontSize: 18.sp,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               sb(12),
@@ -553,6 +772,7 @@ class _NoteCard extends StatelessWidget {
                 ),
                 TextField(
                   controller: controller,
+                  keyboardType: TextInputType.text,
                   style: TextStyle(
                     fontSize: 16.sp,
                     fontWeight: FontWeight.w500,
@@ -576,6 +796,236 @@ class _NoteCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _FormInputCard extends StatelessWidget {
+  final String title;
+  final String hintText;
+  final TextEditingController controller;
+  final IconData icon;
+
+  const _FormInputCard({
+    required this.title,
+    required this.hintText,
+    required this.controller,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAECEA),
+        borderRadius: BorderRadius.circular(26),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(icon, color: AppColors.primary, size: 24),
+          ),
+          sbw(12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CommonText(
+                  title,
+                  style: TextStyle(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                    color: Color(0xFF5F6565),
+                  ),
+                ),
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.text,
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF202525),
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: hintText,
+                    hintStyle: TextStyle(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFFAEB2B2),
+                    ),
+                    border: InputBorder.none,
+                  ),
+                  maxLines: 1,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MethodDropdownCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final List<String> options;
+  final IconData icon;
+  final bool isExpanded;
+  final VoidCallback onToggle;
+  final ValueChanged<String> onChanged;
+
+  const _MethodDropdownCard({
+    super.key,
+    required this.title,
+    required this.value,
+    required this.options,
+    required this.icon,
+    required this.isExpanded,
+    required this.onToggle,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(26),
+            onTap: onToggle,
+            child: Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAECEA),
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, color: AppColors.primary, size: 24),
+                  sbw(12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CommonText(
+                          title,
+                          style: TextStyle(
+                            fontSize: 11.sp,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            color: Color(0xFF5F6565),
+                          ),
+                        ),
+                        sb(2),
+                        CommonText(
+                          value,
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF202525),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0, end: isExpanded ? 1 : 0),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOutCubic,
+          builder: (BuildContext context, double t, Widget? child) {
+            return ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: t,
+                child: Opacity(
+                  opacity: t.clamp(0.0, 1.0),
+                  child: Transform.translate(
+                    offset: Offset(0, (1 - t) * -10),
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 8 * t),
+                      child: child,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+          child: IgnorePointer(
+            ignoring: !isExpanded,
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE1E5E8)),
+              ),
+              child: Column(
+                children: options.map((String option) {
+                  final bool selected = option == value;
+                  return Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => onChanged(option),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: CommonText(
+                                option,
+                                style: TextStyle(
+                                  fontSize: 15.sp,
+                                  fontWeight:
+                                      selected ? FontWeight.w700 : FontWeight.w500,
+                                  color: selected
+                                      ? AppColors.primary
+                                      : const Color(0xFF2A2F33),
+                                ),
+                              ),
+                            ),
+                            if (selected)
+                              Icon(
+                                Icons.check_rounded,
+                                color: AppColors.primary,
+                                size: 18,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

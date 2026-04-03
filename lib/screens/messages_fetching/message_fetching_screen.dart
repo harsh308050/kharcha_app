@@ -11,7 +11,9 @@ import 'package:kharcha/screens/home/home_screen.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_image.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
+import 'package:kharcha/utils/drive/drive_backup_service.dart';
 import 'package:kharcha/utils/my_cm.dart';
+import 'package:kharcha/utils/sms/sms_transaction.dart';
 
 class MessageFetchingScreen extends StatefulWidget {
   const MessageFetchingScreen({super.key});
@@ -21,6 +23,43 @@ class MessageFetchingScreen extends StatefulWidget {
 }
 
 class _MessageFetchingScreenState extends State<MessageFetchingScreen> {
+  final DriveBackupService _driveBackupService = DriveBackupService();
+  bool _isBackingUpDrive = false;
+  bool _isCompletingFlow = false;
+
+  Future<void> _backupAndNavigate(List<SmsTransaction> transactions) async {
+    if (_isCompletingFlow) {
+      return;
+    }
+
+    _isCompletingFlow = true;
+    if (mounted) {
+      setState(() {
+        _isBackingUpDrive = true;
+      });
+    }
+
+    try {
+      final DriveBackupResult backupResult =
+          await _driveBackupService.backupTransactionsToDrive(transactions);
+      if (mounted &&
+          context.mounted &&
+          !backupResult.success &&
+          backupResult.message.trim().isNotEmpty) {
+        showSnackBar(context, backupResult.message, AppColors.red);
+      }
+    } catch (_) {
+      // Keep app flow intact even if backup fails.
+    } finally {
+      if (mounted && context.mounted) {
+        setState(() {
+          _isBackingUpDrive = false;
+        });
+        callNextScreenAndClearStack(context, const HomeScreen());
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -37,7 +76,7 @@ class _MessageFetchingScreenState extends State<MessageFetchingScreen> {
           currentState is SmsPermissionDenied) {
         smsBloc.add(const SmsFetchRequested());
       } else if (currentState is SmsLoaded) {
-        callNextScreenAndClearStack(context, const HomeScreen());
+        _backupAndNavigate(currentState.transactions);
       }
     });
   }
@@ -62,10 +101,7 @@ class _MessageFetchingScreenState extends State<MessageFetchingScreen> {
           child: BlocConsumer<SmsBloc, SmsState>(
             listener: (BuildContext context, SmsState state) {
               if (state is SmsLoaded) {
-                Future<void>.delayed(const Duration(milliseconds: 300), () {
-                  if (!mounted || !context.mounted) return;
-                  callNextScreenAndClearStack(context, const HomeScreen());
-                });
+                _backupAndNavigate(state.transactions);
               }
             },
             builder: (BuildContext context, SmsState state) {
@@ -86,6 +122,8 @@ class _MessageFetchingScreenState extends State<MessageFetchingScreen> {
                     ? 'SMS permission denied'
                     : state is SmsFailure
                         ? 'Failed to read messages'
+                        : _isBackingUpDrive
+                            ? 'Saving backup...'
                         : isLoading
                             ? 'Scanning...'
                             : 'Scan complete';
@@ -95,6 +133,8 @@ class _MessageFetchingScreenState extends State<MessageFetchingScreen> {
                     ? (state.message.isEmpty
                       ? 'Unable to read messages'
                       : state.message)
+                    : _isBackingUpDrive
+                      ? 'Storing transactions in Google Drive...'
                     : 'Please wait while we fetch your messages';
 
                 return Column(

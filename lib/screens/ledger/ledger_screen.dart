@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import "package:flutter_screenutil/flutter_screenutil.dart";
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,12 +7,17 @@ import 'package:kharcha/bloc/sms/sms_bloc.dart';
 import 'package:kharcha/bloc/sms/sms_event.dart';
 import 'package:kharcha/bloc/sms/sms_state.dart';
 import 'package:kharcha/components/common_text.dart';
+import 'package:kharcha/components/common_shimmer.dart';
 import 'package:kharcha/screens/ledger/transaction_detail_screen.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
 import 'package:kharcha/utils/anim/marquee_text.dart';
+import 'package:kharcha/utils/drive/drive_backup_service.dart';
 import 'package:kharcha/utils/sms/sms_transaction.dart';
 import 'package:kharcha/utils/my_cm.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:kharcha/utils/drive/drive_read_service.dart';
 
 class LedgerTabScreen extends StatefulWidget {
   const LedgerTabScreen({super.key});
@@ -36,12 +43,15 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
   static const int _pageSize = 25;
 
   final ScrollController _scrollController = ScrollController();
+  late DriveReadService _driveReadService;
+  late DriveBackupService _driveBackupService;
+  Timer? _autoSyncTimer;
   List<SmsTransaction> _transactions = const <SmsTransaction>[];
   bool _isInitialLoading = true;
   bool _isPermissionDenied = false;
   bool _isLoadingMore = false;
+  bool _isSyncingFromSms = false;
   String? _ledgerError;
-  int _sourceFingerprint = -1;
   int _visibleTransactionsLimit = _pageSize;
   int _lastFilteredCount = 0;
 
@@ -54,38 +64,159 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-
-    final SmsState initialSmsState = context.read<SmsBloc>().state;
-    if (initialSmsState is SmsLoaded) {
-      _sourceFingerprint = _calculateSourceFingerprint(
-        initialSmsState.transactions,
-      );
-      _transactions = _mapKnownTransactions(initialSmsState.transactions);
-      _isInitialLoading = false;
-      _isPermissionDenied = false;
-      _isLoadingMore = false;
-      _ledgerError = null;
-      _visibleTransactionsLimit = _pageSize;
-      _lastFilteredCount = _transactions.length;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-
-      _consumeSmsState(
-        context.read<SmsBloc>().state,
-        triggerFetchIfNeeded: true,
-      );
-    });
+    _driveReadService = DriveReadService();
+    _driveBackupService = DriveBackupService();
+    _checkAndLoadDriveTransactions();
+    _autoSyncTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _syncLatestTransactionsFromSms(silent: true),
+    );
   }
 
   @override
   void dispose() {
+    _autoSyncTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+  
+  Future<void> _checkAndLoadDriveTransactions() async {
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _isPermissionDenied = true;
+          _ledgerError = 'Please sign in to view Drive transactions.';
+        });
+      }
+      return;
+    }
+
+    final String userEmail = (currentUser.email ?? '').trim().toLowerCase();
+    if (userEmail.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _isPermissionDenied = true;
+          _ledgerError = 'Unable to identify the signed-in account.';
+        });
+      }
+      return;
+    }
+
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> userSnapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userEmail)
+              .get();
+      final Map<String, dynamic>? userData = userSnapshot.data();
+      final bool driveGranted = (userData?['driveAccessGranted'] as bool?) ?? false;
+
+      if (driveGranted && mounted) {
+        setState(() {
+          _isPermissionDenied = false;
+          _ledgerError = null;
+        });
+        _loadDriveTransactions();
+      } else if (mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _isPermissionDenied = true;
+          _ledgerError = 'Google Drive access is required to show transactions.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _isPermissionDenied = true;
+          _ledgerError = 'Unable to load Drive transactions.';
+        });
+      }
+    }
+  }
+
+  Future<void> _loadDriveTransactions() async {
+    if (!mounted) {
+      return;
+    }
+
+    try {
+      final List<SmsTransaction> driveTransactions =
+          await _driveReadService.readTransactionsFromDrive();
+      if (mounted) {
+        setState(() {
+          if (driveTransactions.isNotEmpty) {
+            _transactions = driveTransactions;
+            _isInitialLoading = false;
+            _isPermissionDenied = false;
+            _ledgerError = null;
+            _visibleTransactionsLimit = _pageSize;
+            _lastFilteredCount = _transactions.length;
+          } else {
+            _transactions = <SmsTransaction>[];
+            _isInitialLoading = false;
+            _isPermissionDenied = false;
+            _ledgerError = null;
+            _visibleTransactionsLimit = _pageSize;
+            _lastFilteredCount = 0;
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _isPermissionDenied = true;
+          _ledgerError = 'Failed to read transactions from Drive.';
+        });
+      }
+    }
+  }
+
+  Future<void> _syncLatestTransactionsFromSms({bool silent = false}) async {
+    if (_isSyncingFromSms || !mounted) {
+      return;
+    }
+
+    _isSyncingFromSms = true;
+    try {
+      final SmsBloc smsBloc = context.read<SmsBloc>();
+      smsBloc.add(const SmsFetchRequested());
+
+      final SmsState result = await smsBloc.stream.firstWhere(
+        (SmsState state) =>
+            state is SmsLoaded ||
+            state is SmsPermissionDenied ||
+            state is SmsFailure,
+      );
+
+      if (result is SmsLoaded && result.transactions.isNotEmpty) {
+        await _driveBackupService.backupTransactionsToDrive(result.transactions);
+        await _loadDriveTransactions();
+        return;
+      }
+
+      if (!silent && mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _isPermissionDenied = result is SmsPermissionDenied;
+          _ledgerError = result is SmsFailure ? result.message : _ledgerError;
+        });
+      }
+    } catch (_) {
+      if (!silent && mounted) {
+        setState(() {
+          _isInitialLoading = false;
+          _ledgerError = 'Unable to sync new transactions right now.';
+        });
+      }
+    } finally {
+      _isSyncingFromSms = false;
+    }
   }
 
   void _onScroll() {
@@ -126,47 +257,35 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
   }
 
   Future<void> _onRefresh() async {
-    final SmsBloc smsBloc = context.read<SmsBloc>();
-    smsBloc.add(const SmsFetchRequested());
-    await smsBloc.stream.firstWhere(
-      (SmsState state) =>
-          state is SmsLoaded ||
-          state is SmsPermissionDenied ||
-          state is SmsFailure,
-    );
+    await _syncLatestTransactionsFromSms();
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<SmsBloc, SmsState>(
-      listener: (BuildContext context, SmsState state) {
-        _consumeSmsState(state);
-      },
-      builder: (BuildContext context, SmsState smsState) {
-          final List<String> methodFilters = _buildMethodFilters(
-            _transactions,
-          );
-          if (!methodFilters.contains(_selectedMethodFilter)) {
-            _selectedMethodFilter = _allMethodFilter;
-          }
+    final List<String> methodFilters = _buildMethodFilters(
+      _transactions,
+    );
+    if (!methodFilters.contains(_selectedMethodFilter)) {
+      _selectedMethodFilter = _allMethodFilter;
+    }
 
-          final List<SmsTransaction> filtered = _applyFilter(_transactions);
-          _lastFilteredCount = filtered.length;
-          final int visibleCount = _visibleTransactionsLimit.clamp(0, _lastFilteredCount);
-          final List<SmsTransaction> visibleFiltered =
-              filtered.take(visibleCount).toList();
-          final bool hasMoreToLoad = visibleCount < _lastFilteredCount;
-          final List<_LedgerListEntry> listEntries =
-              _buildListEntries(visibleFiltered);
+    final List<SmsTransaction> filtered = _applyFilter(_transactions);
+    _lastFilteredCount = filtered.length;
+    final int visibleCount = _visibleTransactionsLimit.clamp(0, _lastFilteredCount);
+    final List<SmsTransaction> visibleFiltered =
+        filtered.take(visibleCount).toList();
+    final bool hasMoreToLoad = visibleCount < _lastFilteredCount;
+    final List<_LedgerListEntry> listEntries =
+        _buildListEntries(visibleFiltered);
 
-          return RefreshIndicator(
-            onRefresh: _onRefresh,
-            backgroundColor: AppColors.white,
-            color: AppColors.primary,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      backgroundColor: AppColors.white,
+      color: AppColors.primary,
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
@@ -277,129 +396,14 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
                 SliverToBoxAdapter(
                   child: _isLoadingMore
                       ? Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Center(
-                            child: SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
+                          padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                          child: const CommonShimmerList(count: 1),
                         )
                       : SizedBox(height: hasMoreToLoad ? 28.h : 18.h),
                 ),
-              ],
-            ),
-          );
-      },
+        ],
+      ),
     );
-  }
-
-  void _consumeSmsState(
-    SmsState smsState, {
-    bool triggerFetchIfNeeded = false,
-  }) {
-    if (smsState is SmsInitial) {
-      if (triggerFetchIfNeeded) {
-        context.read<SmsBloc>().add(const SmsFetchRequested());
-      }
-      if (mounted) {
-        setState(() {
-          _isInitialLoading = _transactions.isEmpty;
-          _isPermissionDenied = false;
-          _ledgerError = null;
-        });
-      }
-      return;
-    }
-
-    if (smsState is SmsLoading) {
-      if (mounted) {
-        setState(() {
-          _isInitialLoading = _transactions.isEmpty;
-          _isPermissionDenied = false;
-          _ledgerError = null;
-        });
-      }
-      return;
-    }
-
-    if (smsState is SmsPermissionDenied) {
-      if (mounted) {
-        setState(() {
-          _transactions = const <SmsTransaction>[];
-          _isInitialLoading = false;
-          _isPermissionDenied = true;
-          _isLoadingMore = false;
-          _ledgerError = null;
-          _visibleTransactionsLimit = _pageSize;
-          _lastFilteredCount = 0;
-        });
-      }
-      return;
-    }
-
-    if (smsState is SmsFailure) {
-      if (mounted) {
-        setState(() {
-          _isInitialLoading = false;
-          _isPermissionDenied = false;
-          _isLoadingMore = false;
-          _ledgerError = smsState.message;
-        });
-      }
-      return;
-    }
-
-    if (smsState is SmsLoaded) {
-      final int fingerprint = _calculateSourceFingerprint(
-        smsState.transactions,
-      );
-      if (_sourceFingerprint != fingerprint || _transactions.isEmpty) {
-        final List<SmsTransaction> knownTransactions = _mapKnownTransactions(
-          smsState.transactions,
-        );
-
-        if (mounted) {
-          setState(() {
-            _sourceFingerprint = fingerprint;
-            _transactions = knownTransactions;
-            _isInitialLoading = false;
-            _isPermissionDenied = false;
-            _isLoadingMore = false;
-            _ledgerError = null;
-            _visibleTransactionsLimit = _pageSize;
-            _lastFilteredCount = knownTransactions.length;
-          });
-        }
-      }
-    }
-  }
-
-  int _calculateSourceFingerprint(List<SmsTransaction> transactions) {
-    int hash = transactions.length;
-    for (final SmsTransaction transaction in transactions) {
-      hash = 31 * hash + transaction.rawMessage.hashCode;
-      hash = 31 * hash + transaction.senderId.hashCode;
-      hash = 31 * hash + transaction.amount.hashCode;
-    }
-    return hash;
-  }
-
-  List<SmsTransaction> _mapKnownTransactions(
-    List<SmsTransaction> transactions,
-  ) {
-    final List<SmsTransaction> known = transactions
-        .where((SmsTransaction transaction) => transaction.isKnownTransaction)
-        .toList();
-    known.sort(
-      (SmsTransaction a, SmsTransaction b) =>
-          b.transactionDate.compareTo(a.transactionDate),
-    );
-    return known;
   }
 
   List<Widget> _buildBodySlivers(
@@ -412,24 +416,10 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
   ) {
     if (isLoading) {
       return <Widget>[
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(24, 40, 24, 16),
-            child: Column(
-              mainAxisAlignment: .center,
-              children: [
-                CircularProgressIndicator(color: AppColors.primary),
-                sb(12),
-                CommonText(
-                  'Scanning messages...',
-                  style: TextStyle(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF54606D),
-                  ),
-                ),
-              ],
-            ),
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: 20),
+          sliver: const SliverToBoxAdapter(
+            child: CommonShimmerList(count: 6),
           ),
         ),
       ];
@@ -839,12 +829,13 @@ class _TransactionTile extends StatelessWidget {
     final String normalizedMethod = data.method.trim().toUpperCase();
 
     if (!data.isDebit) {
-      return const _TileVisual(
+      return _TileVisual(
         icon: Icons.account_balance_wallet_outlined,
         iconColor: AppColors.primary,
         iconBackground: Color(0xFFD6E6E0),
         amountColor: AppColors.primary,
-        trailingText: AppStrings.salary,
+        trailingText:
+            normalizedMethod.isEmpty ? AppStrings.tagNow : normalizedMethod,
         trailingTextColor: AppColors.primary,
         trailingBackground: Color(0xFFD8EBE4),
         showAccent: false,
@@ -944,8 +935,8 @@ class _TransactionTile extends StatelessWidget {
           color: AppColors.white,
           borderRadius: BorderRadius.circular(22),
           border: visual.showAccent
-              ? Border(left: BorderSide(width: 4, color: AppColors.yellow))
-              : null,
+              ? Border(left: BorderSide(width: 4, color: AppColors.red))
+              : Border(left: BorderSide(color: AppColors.primary, width: 4)),
         ),
         clipBehavior: Clip.antiAlias,
         child: Padding(

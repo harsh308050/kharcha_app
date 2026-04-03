@@ -2,6 +2,7 @@ import "package:flutter_screenutil/flutter_screenutil.dart";
 import 'package:flutter/material.dart';
 import 'package:kharcha/components/common_button.dart';
 import 'package:kharcha/components/common_text.dart';
+import 'package:kharcha/utils/drive/drive_backup_service.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_icons.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
@@ -37,27 +38,169 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   bool _isEditingCategory = false;
   bool _isEditingNote = false;
   bool _isRawSmsExpanded = true;
+  bool _isSaving = false;
+  bool _isDeleting = false;
+
+  final DriveBackupService _driveBackupService = DriveBackupService();
 
   late final TextEditingController _merchantController;
   late final TextEditingController _noteController;
+  late final FocusNode _merchantFocusNode;
+  late final FocusNode _noteFocusNode;
 
   @override
   void initState() {
     super.initState();
     _merchant = widget.transaction.displaySenderLabel;
-    _category = widget.transaction.isDebit ? 'Other' : 'Income';
-    _note = widget.transaction.method.trim().isEmpty
-        ? 'Imported from SMS'
-        : 'Imported via ${widget.transaction.method.trim()} SMS';
+    _category = widget.transaction.category.trim().isEmpty
+        ? (widget.transaction.isDebit ? 'Other' : 'Income')
+        : widget.transaction.category.trim();
+    final String existingNote = widget.transaction.note.trim();
+    if (existingNote.isNotEmpty) {
+      _note = existingNote;
+    } else {
+      final String method = widget.transaction.method.trim();
+      _note = method.isEmpty ? 'Imported from SMS' : 'Imported via $method SMS';
+    }
 
     _merchantController = TextEditingController(text: _merchant);
     _noteController = TextEditingController(text: _note);
+    _merchantFocusNode = FocusNode();
+    _noteFocusNode = FocusNode();
+  }
+
+  bool get _isManualTransaction {
+    return widget.transaction.reference.trim().toLowerCase().startsWith('manual-') ||
+        widget.transaction.rawMessage.trim().toUpperCase().startsWith('[MANUAL]');
+  }
+
+  Future<void> _saveChanges() async {
+    if (_isSaving) {
+      return;
+    }
+
+    final String updatedMerchant = _merchantController.text.trim().isEmpty
+        ? _merchant
+        : _merchantController.text.trim();
+    final String updatedNote = _noteController.text.trim().isEmpty
+        ? _note
+        : _noteController.text.trim();
+
+    final SmsTransaction updated = widget.transaction.copyWith(
+      senderId: updatedMerchant,
+      counterparty: updatedMerchant,
+      category: _category,
+      note: updatedNote,
+    );
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final DriveBackupResult result = await _driveBackupService
+          .updateTransactionInDrive(
+            original: widget.transaction,
+            updated: updated,
+          );
+      if (!mounted) {
+        return;
+      }
+
+      if (!result.success) {
+        showSnackBar(context, result.message, AppColors.red);
+        return;
+      }
+
+      setState(() {
+        _merchant = updatedMerchant;
+        _note = updatedNote;
+        _isEditingMerchant = false;
+        _isEditingCategory = false;
+        _isEditingNote = false;
+      });
+
+      showSnackBar(context, 'Transaction updated', AppColors.primary);
+      Navigator.of(context).pop(true);
+    } catch (_) {
+      if (mounted) {
+        showSnackBar(context, 'Failed to update transaction', AppColors.red);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteTransaction() async {
+    if (_isDeleting || !_isManualTransaction) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete transaction?'),
+          content: const Text('This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      final DriveBackupResult result = await _driveBackupService
+          .deleteTransactionFromDrive(transaction: widget.transaction);
+      if (!mounted) {
+        return;
+      }
+
+      if (!result.success) {
+        showSnackBar(context, result.message, AppColors.red);
+        return;
+      }
+
+      showSnackBar(context, 'Transaction deleted', AppColors.primary);
+      Navigator.of(context).pop(true);
+    } catch (_) {
+      if (mounted) {
+        showSnackBar(context, 'Failed to delete transaction', AppColors.red);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _merchantController.dispose();
     _noteController.dispose();
+    _merchantFocusNode.dispose();
+    _noteFocusNode.dispose();
     super.dispose();
   }
 
@@ -175,11 +318,22 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                       value: _merchant,
                       isEditing: _isEditingMerchant,
                       textController: _merchantController,
+                      textFocusNode: _merchantFocusNode,
                       onEditTap: () {
+                        final bool willEdit = !_isEditingMerchant;
                         setState(() {
-                          _isEditingMerchant = !_isEditingMerchant;
+                          _isEditingMerchant = willEdit;
                           _merchantController.text = _merchant;
                         });
+                        if (willEdit) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              _merchantFocusNode.requestFocus();
+                            }
+                          });
+                        } else {
+                          _merchantFocusNode.unfocus();
+                        }
                       },
                       onEditingComplete: () {
                         setState(() {
@@ -220,11 +374,22 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                       isMultiLine: true,
                       isEditing: _isEditingNote,
                       textController: _noteController,
+                      textFocusNode: _noteFocusNode,
                       onEditTap: () {
+                        final bool willEdit = !_isEditingNote;
                         setState(() {
-                          _isEditingNote = !_isEditingNote;
+                          _isEditingNote = willEdit;
                           _noteController.text = _note;
                         });
+                        if (willEdit) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              _noteFocusNode.requestFocus();
+                            }
+                          });
+                        } else {
+                          _noteFocusNode.unfocus();
+                        }
                       },
                       onEditingComplete: () {
                         setState(() {
@@ -300,37 +465,44 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
               ),
               sb(24),
               CustomButton(
-                onButtonPressed: () {},
+                onButtonPressed: _isManualTransaction ? _deleteTransaction : () {},
                 buttonText: 'Delete Transaction',
+                isLoading: _isDeleting,
                 borderColor: AppColors.red,
                 borderRadius: 16,
-                backgroundColor: AppColors.white,
+                backgroundColor: _isManualTransaction
+                    ? AppColors.white
+                    : const Color(0xFFF4F4F4),
                 borderWidth: 1,
-                textColor: AppColors.red,
+                textColor: _isManualTransaction ? AppColors.red : const Color(0xFFB8BEC6),
                 fontSize: 16.sp,
                 fontWeight: FontWeight.w700,
                 showPrefixIcon: true,
-                prefixIcon: Icon(Icons.delete_outline, color: AppColors.red, size: 22),
+                prefixIcon: Icon(
+                  Icons.delete_outline,
+                  color: _isManualTransaction ? AppColors.red : const Color(0xFFB8BEC6),
+                  size: 22,
+                ),
               ),
+              if (!_isManualTransaction)
+                Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: CommonText(
+                    'Only manually added transactions can be deleted.',
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF8A949E),
+                    ),
+                  ),
+                ),
               sb(28),
               Center(
                 child: SizedBox(
                   width: double.infinity,
                   child: CustomButton(
-                    onButtonPressed: () {
-                      setState(() {
-                        _merchant = _merchantController.text.trim().isEmpty
-                            ? _merchant
-                            : _merchantController.text.trim();
-                        _note = _noteController.text.trim().isEmpty
-                            ? _note
-                            : _noteController.text.trim();
-                        _isEditingMerchant = false;
-                        _isEditingCategory = false;
-                        _isEditingNote = false;
-                      });
-                      showSnackBar(context, 'Transaction updated', AppColors.primary);
-                    },
+                    onButtonPressed: _saveChanges,
+                    isLoading: _isSaving,
                     buttonText: AppStrings.saveChanges,
                     borderRadius: 26,
                     backgroundColor: AppColors.primary,
@@ -380,6 +552,7 @@ class _DetailRow extends StatelessWidget {
   final bool isMultiLine;
   final bool isEditing;
   final TextEditingController? textController;
+  final FocusNode? textFocusNode;
   final VoidCallback? onEditTap;
   final VoidCallback? onEditingComplete;
   final Widget? editorChild;
@@ -391,6 +564,7 @@ class _DetailRow extends StatelessWidget {
     this.isMultiLine = false,
     this.isEditing = false,
     this.textController,
+    this.textFocusNode,
     this.onEditTap,
     this.onEditingComplete,
     this.editorChild,
@@ -430,6 +604,7 @@ class _DetailRow extends StatelessWidget {
               else if (isEditing && textController != null)
                 TextField(
                   controller: textController,
+                  focusNode: textFocusNode,
                   maxLines: isMultiLine ? 3 : 1,
                   minLines: 1,
                   textInputAction: TextInputAction.done,

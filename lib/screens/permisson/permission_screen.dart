@@ -91,18 +91,6 @@ class _PermissionScreenState extends State<PermissionScreen> {
       return;
     }
 
-    final bool isGoogleUser = currentUser.providerData.any(
-      (UserInfo userInfo) => userInfo.providerId == 'google.com',
-    );
-    if (!isGoogleUser) {
-      showSnackBar(
-        context,
-        'Google Drive access is available for Google sign-in users only.',
-        AppColors.red,
-      );
-      return;
-    }
-
     setState(() {
       _isDriveLoading = true;
     });

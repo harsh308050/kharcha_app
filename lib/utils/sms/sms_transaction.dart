@@ -16,6 +16,8 @@ class SmsTransaction {
   final String counterparty;
   final String reference;
   final String date;
+  final String category;
+  final String note;
 
   const SmsTransaction({
     required this.rawMessage,
@@ -31,6 +33,8 @@ class SmsTransaction {
     required this.counterparty,
     required this.reference,
     required this.date,
+    this.category = 'Other',
+    this.note = 'Imported from SMS',
   });
 
   SmsTransaction copyWith({
@@ -47,6 +51,8 @@ class SmsTransaction {
     String? counterparty,
     String? reference,
     String? date,
+    String? category,
+    String? note,
   }) {
     return SmsTransaction(
       rawMessage: rawMessage ?? this.rawMessage,
@@ -62,11 +68,14 @@ class SmsTransaction {
       counterparty: counterparty ?? this.counterparty,
       reference: reference ?? this.reference,
       date: date ?? this.date,
+      category: category ?? this.category,
+      note: note ?? this.note,
     );
   }
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
+      // Raw SMS fields
       'rawMessage': rawMessage,
       'senderId': senderId,
       'smsDate': smsDate?.toIso8601String(),
@@ -80,6 +89,14 @@ class SmsTransaction {
       'counterparty': counterparty,
       'reference': reference,
       'date': date,
+      // User customization fields
+      'category': category,
+      'note': note,
+      // Computed display fields for faster restoration
+      'transactionDateISO': transactionDate.toIso8601String(),
+      'displayMerchant': displaySenderLabel,
+      'isDebit': isDebit,
+      'formattedAmountStr': formattedAmount,
     };
   }
 

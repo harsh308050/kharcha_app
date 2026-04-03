@@ -12,7 +12,20 @@
           "package_name": "com.harsh.kharcha"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "124362980344-lq56e0bd9fnaqr92a312v8oi5agngndf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.harsh.kharcha",
+            "certificate_hash": "e3093631737bd46514861868a6e5c2d998bbe1d2"
+          }
+        },
+        {
+          "client_id": "124362980344-j5ds2cvdv45dibv4a5oft6b481k99c9v.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDO6seFLLIyNS5z0heao_t2we_u80AD_Tk"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "124362980344-j5ds2cvdv45dibv4a5oft6b481k99c9v.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "124362980344-okh8grj4ao2vaopiq3826rvi9uoot7hh.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.harsh.kharcha"
+              }
+            }
+          ]
         }
       }
     }
