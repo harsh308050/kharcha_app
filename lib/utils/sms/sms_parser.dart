@@ -249,8 +249,10 @@ class AccountParser {
   }
 
   static bool _hasAccountKeywords(String lower) {
-    return RegExp(r'\b(?:a/c|ac|acct|account)\b', caseSensitive: false)
-        .hasMatch(lower);
+    return RegExp(
+      r'\b(?:a/c|ac|acct|account)\b',
+      caseSensitive: false,
+    ).hasMatch(lower);
   }
 
   static String? _extractAccountNumber(String message, AccountType type) {
@@ -263,9 +265,7 @@ class AccountParser {
       final Match? match = masked.firstMatch(message);
       if (match != null) return match.group(1);
 
-      final RegExp plain = RegExp(
-        r'\b(\d{4})\b',
-      );
+      final RegExp plain = RegExp(r'\b(\d{4})\b');
       final Match? plainMatch = plain.firstMatch(message);
       if (plainMatch != null) return plainMatch.group(1);
     }
@@ -332,10 +332,7 @@ class AccountParser {
 }
 
 class BalanceParser {
-  static String? getBalance(
-    String message,
-    BalanceKeywordType type,
-  ) {
+  static String? getBalance(String message, BalanceKeywordType type) {
     final String lower = message.toLowerCase();
     final List<String> keywords = type == BalanceKeywordType.available
         ? availableBalanceKeywords
@@ -344,11 +341,7 @@ class BalanceParser {
     for (final String keyword in keywords) {
       final int idx = lower.indexOf(keyword.toLowerCase());
       if (idx != -1) {
-        return _extractBalanceValue(
-          message,
-          idx + keyword.length,
-          lower,
-        );
+        return _extractBalanceValue(message, idx + keyword.length, lower);
       }
     }
     return null;
@@ -382,7 +375,7 @@ class BalanceParser {
 class TransactionParser {
   static String getTransactionAmount(String message) {
     final RegExp pattern = RegExp(
-      r'(?:Rs\.?|INR)\s*([0-9]+(?:\.[0-9]{1,2})?)',
+      r'(?:Rs\.?|INR)\s*([0-9]+(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?)',
       caseSensitive: false,
     );
     final Match? match = pattern.firstMatch(message);
@@ -392,13 +385,13 @@ class TransactionParser {
   static TransactionType? getTransactionType(String message) {
     final String lower = message.toLowerCase();
     if (RegExp(
-      r'\b(?:debited|debit|sent|paid|spent|purchase|withdrawn|deducted|charged)\b',
+      r'\b(?:debited|debit|sent|paid|spent|purchase|withdrawn|deducted|charged|dr\.?)\b',
       caseSensitive: false,
     ).hasMatch(lower)) {
       return TransactionType.debit;
     }
     if (RegExp(
-      r'\b(?:credited|credit|received|deposit|refund|reversed|repayment)\b',
+      r'\b(?:credited|credit|received|deposit|deposited|refund|reversed|repayment|salary|cr\.?)\b',
       caseSensitive: false,
     ).hasMatch(lower)) {
       return TransactionType.credit;
@@ -411,11 +404,17 @@ class MerchantParser {
   static MerchantInfo extractMerchantInfo(String message) {
     final String merchant = _extractMerchant(message);
     final String? referenceNo = _extractReferenceNumber(message);
-    return MerchantInfo(merchant: merchant.isEmpty ? null : merchant, referenceNo: referenceNo);
+    return MerchantInfo(
+      merchant: merchant.isEmpty ? null : merchant,
+      referenceNo: referenceNo,
+    );
   }
 
   static String _extractMerchant(String message) {
-    final RegExp atPattern = RegExp(r'at\s+([a-z\s]+?)(?:\.|,|;|$|\d)', caseSensitive: false);
+    final RegExp atPattern = RegExp(
+      r'at\s+([a-z\s]+?)(?:\.|,|;|$|\d)',
+      caseSensitive: false,
+    );
     final Match? atMatch = atPattern.firstMatch(message);
     if (atMatch != null) {
       final String? extracted = atMatch.group(1);
@@ -424,7 +423,10 @@ class MerchantParser {
       }
     }
 
-    final RegExp toPattern = RegExp(r'(?:sent|paid)\s+to\s+([a-z\s]+?)(?:\.|,|;|$|\d)', caseSensitive: false);
+    final RegExp toPattern = RegExp(
+      r'(?:sent|paid)\s+to\s+([a-z\s]+?)(?:\.|,|;|$|\d)',
+      caseSensitive: false,
+    );
     final Match? toMatch = toPattern.firstMatch(message);
     if (toMatch != null) {
       final String? extracted = toMatch.group(1);
@@ -469,9 +471,15 @@ class MessageProcessor {
     return 'Rs.$value';
   }
 
-  static List<String> getNextWords(String message, String trigger, {int count = 1}) {
+  static List<String> getNextWords(
+    String message,
+    String trigger, {
+    int count = 1,
+  }) {
     final List<String> words = message.split(' ');
-    final int idx = words.indexWhere((String w) => w.toLowerCase().contains(trigger.toLowerCase()));
+    final int idx = words.indexWhere(
+      (String w) => w.toLowerCase().contains(trigger.toLowerCase()),
+    );
     if (idx == -1 || idx + count >= words.length) return <String>[];
     return words.sublist(idx + 1, (idx + 1 + count).clamp(0, words.length));
   }
@@ -483,7 +491,7 @@ class MessageProcessor {
 
 class SmsParser {
   static final RegExp _amountExp = RegExp(
-    r'(?:Rs\.?|INR)\s*([0-9]+(?:\.[0-9]{1,2})?)',
+    r'(?:Rs\.?|INR)\s*([0-9]+(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?)',
     caseSensitive: false,
   );
   static final RegExp _maskedAccountExp = RegExp(
@@ -515,7 +523,7 @@ class SmsParser {
     caseSensitive: false,
   );
   static final RegExp _txnVerbExp = RegExp(
-    r'\b(?:debited|credited|sent|paid|received|deducted|charged|spent|withdrawn)\b',
+    r'\b(?:debited|credited|sent|paid|received|deducted|charged|spent|withdrawn|deposit|deposited|salary|cr\.?|dr\.?)\b',
     caseSensitive: false,
   );
   static final RegExp _txnContextExp = RegExp(
@@ -594,7 +602,9 @@ class SmsParser {
       normalized,
     );
 
-    final String amountText = TransactionParser.getTransactionAmount(normalized);
+    final String amountText = TransactionParser.getTransactionAmount(
+      normalized,
+    );
     double amount = _parseAmount(amountText);
     if (amount <= 0) {
       amount = _parseAmountFromRegex(normalized);
@@ -657,15 +667,17 @@ class SmsParser {
   static bool _isLikelyTransaction(String normalized) {
     if (_isNonTransaction(normalized)) return false;
 
-    final bool hasAmount = _amountExp.hasMatch(normalized) ||
+    final bool hasAmount =
+        _amountExp.hasMatch(normalized) ||
         TransactionParser.getTransactionAmount(normalized).isNotEmpty;
     if (!hasAmount) return false;
 
     final bool hasTxnVerb = _txnVerbExp.hasMatch(normalized);
     final bool hasTxnContext = _txnContextExp.hasMatch(normalized);
-    final bool hasUpi = _upiKeywordExp.hasMatch(normalized) ||
-        _hasUpiHandle(normalized);
-    final bool hasAccount = _accountKeywordExp.hasMatch(normalized) ||
+    final bool hasUpi =
+        _upiKeywordExp.hasMatch(normalized) || _hasUpiHandle(normalized);
+    final bool hasAccount =
+        _accountKeywordExp.hasMatch(normalized) ||
         _cardKeywordExp.hasMatch(normalized) ||
         _hasWalletKeyword(normalized);
     final bool hasBank = _bankKeywordExp.hasMatch(normalized);
@@ -718,13 +730,13 @@ class SmsParser {
   static TransactionType? _inferType(String text) {
     final String lower = text.toLowerCase();
     if (RegExp(
-      r'\b(?:credited|credit|received|deposit|refund|reversed|repayment)\b',
+      r'\b(?:credited|credit|received|deposit|deposited|refund|reversed|repayment|salary|cr\.?)\b',
       caseSensitive: false,
     ).hasMatch(lower)) {
       return TransactionType.credit;
     }
     if (RegExp(
-      r'\b(?:debited|debit|sent|paid|spent|purchase|withdrawn|deducted|charged)\b',
+      r'\b(?:debited|debit|sent|paid|spent|purchase|withdrawn|deducted|charged|dr\.?)\b',
       caseSensitive: false,
     ).hasMatch(lower)) {
       return TransactionType.debit;

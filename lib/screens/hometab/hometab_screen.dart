@@ -1,10 +1,28 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:kharcha/components/common_shimmer.dart';
 import 'package:kharcha/components/common_text.dart';
+import 'package:kharcha/utils/drive/drive_read_service.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_icons.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
 import 'package:kharcha/utils/my_cm.dart';
+import 'package:kharcha/utils/sms/sms_transaction.dart';
+
+enum _HomeRangeFilter { today, thisWeek, thisMonth, thisYear }
+
+extension _HomeRangeFilterLabel on _HomeRangeFilter {
+  String get label {
+    return switch (this) {
+      _HomeRangeFilter.today => 'Today',
+      _HomeRangeFilter.thisWeek => 'This Week',
+      _HomeRangeFilter.thisMonth => 'This month',
+      _HomeRangeFilter.thisYear => 'This Year',
+    };
+  }
+}
 
 class HomeTabScreen extends StatefulWidget {
   final HomeTabData? data;
@@ -16,22 +34,142 @@ class HomeTabScreen extends StatefulWidget {
 }
 
 class _HomeTabScreenState extends State<HomeTabScreen> {
+  _HomeRangeFilter _selectedFilter = _HomeRangeFilter.today;
+  late final DriveReadService _driveReadService;
+  List<SmsTransaction> _transactions = <SmsTransaction>[];
+  bool _isLoadingTransactions = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _driveReadService = DriveReadService();
+    _loadTransactions();
+  }
+
+  Future<void> _loadTransactions() async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingTransactions = true;
+    });
+
+    final List<SmsTransaction> transactions = await _driveReadService
+        .readTransactionsFromDrive();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _transactions = transactions;
+      _isLoadingTransactions = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final HomeTabData data = widget.data ?? HomeTabData.demo();
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+    final String normalizedEmail = (currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+
+    if (normalizedEmail.isEmpty) {
+      final String fallbackName = _firstNameFrom(
+        (currentUser?.displayName ?? '').trim(),
+      );
+      final String greeting = _timeGreeting(fallbackName);
+      return _buildDashboard(data: data, greeting: greeting);
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(normalizedEmail)
+          .snapshots(),
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
+          ) {
+            final Map<String, dynamic>? userData = snapshot.data?.data();
+            final String fullName =
+                (userData?['fullName'] as String?)?.trim().isNotEmpty == true
+                ? (userData?['fullName'] as String).trim()
+                : (currentUser?.displayName ?? 'User');
+            final String greeting = _timeGreeting(_firstNameFrom(fullName));
+            return _buildDashboard(data: data, greeting: greeting);
+          },
+    );
+  }
+
+  Widget _buildDashboard({
+    required HomeTabData data,
+    required String greeting,
+  }) {
+    final bool isLoading = _isLoadingTransactions;
+    final List<SmsTransaction> filteredTransactions = _applyDateFilter(
+      _transactions,
+    );
+
+    double income = 0;
+    double expenses = 0;
+    for (final SmsTransaction transaction in filteredTransactions) {
+      if (transaction.amount <= 0) {
+        continue;
+      }
+
+      final SmsTransactionType effectiveType = _resolveTypeForSummary(
+        transaction,
+      );
+
+      if (effectiveType == SmsTransactionType.credit) {
+        income += transaction.amount;
+      } else if (effectiveType == SmsTransactionType.debit) {
+        expenses += transaction.amount;
+      }
+    }
+
+    final String totalSpendValue = _formatCurrency(income + expenses);
+    final List<HomeTopStatData> topStats = <HomeTopStatData>[
+      HomeTopStatData(
+        label: AppStrings.income,
+        value: _formatCurrency(income),
+        valueColor: AppColors.primaryDark,
+      ),
+      HomeTopStatData(
+        label: AppStrings.expenses,
+        value: _formatCurrency(expenses),
+        valueColor: AppColors.red,
+      ),
+    ];
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SpendSummary(
-            greeting: data.greeting,
-            totalSpendValue: data.totalSpendValue,
-            totalSpendLabel: data.totalSpendLabel,
-          ),
+          if (isLoading)
+            const _SpendSummaryShimmer()
+          else
+            _SpendSummary(
+              greeting: "$greeting!",
+              totalSpendValue: totalSpendValue,
+              totalSpendLabel: "Total",
+              selectedFilter: _selectedFilter,
+              onFilterChanged: (_HomeRangeFilter selected) {
+                setState(() {
+                  _selectedFilter = selected;
+                });
+              },
+            ),
           sb(20),
-          _TopStatsRow(stats: data.topStats),
+          if (isLoading)
+            const _TopStatsRowShimmer()
+          else
+            _TopStatsRow(stats: topStats),
           sb(20),
           _BudgetAlertCard(
             title: data.budgetAlert.title,
@@ -45,17 +183,203 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
       ),
     );
   }
+
+  String _timeGreeting(String firstName) {
+    final int hour = DateTime.now().hour;
+    final String salutation = hour < 12
+        ? 'Good Morning'
+        : hour < 17
+        ? 'Good Afternoon'
+        : hour < 21
+        ? 'Good Evening'
+        : 'Good Night';
+    return '$salutation $firstName';
+  }
+
+  String _firstNameFrom(String fullName) {
+    final String normalized = fullName.trim();
+    if (normalized.isEmpty) {
+      return 'User';
+    }
+
+    final int firstSpaceIndex = normalized.indexOf(' ');
+    String firstName;
+    if (firstSpaceIndex <= 0) {
+      firstName = normalized;
+    } else {
+      firstName = normalized.substring(0, firstSpaceIndex).trim();
+    }
+
+    // Capitalize first letter
+    if (firstName.isEmpty) {
+      return 'User';
+    }
+    return firstName[0].toUpperCase() + firstName.substring(1).toLowerCase();
+  }
+
+  String _formatCurrency(double amount) {
+    final int intAmount = amount.toInt();
+    final String amountStr = intAmount.toString();
+
+    if (amountStr.length <= 3) {
+      return '₹$amountStr';
+    }
+
+    // Separate last 3 digits and everything before
+    final String lastThree = amountStr.substring(amountStr.length - 3);
+    final String beforeLastThree = amountStr.substring(0, amountStr.length - 3);
+
+    // Format the part before last 3 with commas every 2 digits from right
+    final StringBuffer formattedBefore = StringBuffer();
+    for (int i = 0; i < beforeLastThree.length; i++) {
+      if (i > 0 && (beforeLastThree.length - i) % 2 == 0) {
+        formattedBefore.write(',');
+      }
+      formattedBefore.write(beforeLastThree[i]);
+    }
+
+    // Combine
+    return '₹$formattedBefore,$lastThree';
+  }
+
+  List<SmsTransaction> _applyDateFilter(List<SmsTransaction> source) {
+    final DateTime now = DateTime.now();
+    final DateTime endExclusive = DateTime(now.year, now.month, now.day + 1);
+
+    final DateTime startInclusive = switch (_selectedFilter) {
+      _HomeRangeFilter.today => DateTime(now.year, now.month, now.day),
+      _HomeRangeFilter.thisWeek => DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: now.weekday - 1)),
+      _HomeRangeFilter.thisMonth => DateTime(now.year, now.month, 1),
+      _HomeRangeFilter.thisYear => DateTime(now.year, 1, 1),
+    };
+
+    return source.where((SmsTransaction transaction) {
+      final DateTime txDate = transaction.transactionDate;
+      return !txDate.isBefore(startInclusive) && txDate.isBefore(endExclusive);
+    }).toList();
+  }
+
+  SmsTransactionType _resolveTypeForSummary(SmsTransaction item) {
+    if (item.type == SmsTransactionType.credit ||
+        item.type == SmsTransactionType.debit) {
+      return item.type;
+    }
+
+    final String text = item.rawMessage.toLowerCase();
+    final bool hasCreditKeyword = RegExp(
+      r'\b(?:credited|credit|received|deposit(?:ed)?|salary|cr\.?)\b',
+      caseSensitive: false,
+    ).hasMatch(text);
+    final bool hasDebitKeyword = RegExp(
+      r'\b(?:debited|debit|paid|spent|withdrawn|deducted|purchase|sent|dr\.?)\b',
+      caseSensitive: false,
+    ).hasMatch(text);
+
+    if (hasCreditKeyword && !hasDebitKeyword) {
+      return SmsTransactionType.credit;
+    }
+    if (hasDebitKeyword && !hasCreditKeyword) {
+      return SmsTransactionType.debit;
+    }
+
+    return item.type;
+  }
+}
+
+class _SpendSummaryShimmer extends StatelessWidget {
+  const _SpendSummaryShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const CommonShimmerBlock(width: 170, height: 20),
+            const Spacer(),
+            CommonShimmerBlock(
+              width: 112.w,
+              height: 36.h,
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ],
+        ),
+        sb(12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            CommonShimmerBlock(
+              width: 170.w,
+              height: 44.h,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            sbw(10),
+            const CommonShimmerBlock(width: 92, height: 16),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TopStatsRowShimmer extends StatelessWidget {
+  const _TopStatsRowShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _StatCardShimmer()),
+        sbw(10),
+        Expanded(child: _StatCardShimmer()),
+      ],
+    );
+  }
+}
+
+class _StatCardShimmer extends StatelessWidget {
+  const _StatCardShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 118.h,
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.grey.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CommonShimmerBlock(width: 76, height: 12),
+          sb(14),
+          const CommonShimmerBlock(width: 120, height: 24),
+        ],
+      ),
+    );
+  }
 }
 
 class _SpendSummary extends StatelessWidget {
   final String greeting;
   final String totalSpendValue;
   final String totalSpendLabel;
+  final _HomeRangeFilter selectedFilter;
+  final ValueChanged<_HomeRangeFilter> onFilterChanged;
 
   const _SpendSummary({
     required this.greeting,
     required this.totalSpendValue,
     required this.totalSpendLabel,
+    required this.selectedFilter,
+    required this.onFilterChanged,
   });
 
   @override
@@ -63,13 +387,24 @@ class _SpendSummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CommonText(
-          greeting,
-          style: TextStyle(
-            fontSize: 20.sp,
-            fontWeight: FontWeight.w500,
-            color: AppColors.greyDark,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: CommonText(
+                greeting,
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.greyDark,
+                ),
+              ),
+            ),
+            sbw(10),
+            _HomeRangeDropdown(
+              selectedFilter: selectedFilter,
+              onChanged: onFilterChanged,
+            ),
+          ],
         ),
         sb(8),
         Row(
@@ -100,6 +435,73 @@ class _SpendSummary extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _HomeRangeDropdown extends StatelessWidget {
+  final _HomeRangeFilter selectedFilter;
+  final ValueChanged<_HomeRangeFilter> onChanged;
+
+  const _HomeRangeDropdown({
+    required this.selectedFilter,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_HomeRangeFilter>(
+      initialValue: selectedFilter,
+      onSelected: onChanged,
+      color: AppColors.white,
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      itemBuilder: (BuildContext context) {
+        return _HomeRangeFilter.values
+            .map(
+              (_HomeRangeFilter option) => PopupMenuItem<_HomeRangeFilter>(
+                value: option,
+                child: CommonText(
+                  option.label,
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: option == selectedFilter
+                        ? AppColors.primary
+                        : AppColors.greyDark,
+                  ),
+                ),
+              ),
+            )
+            .toList();
+      },
+      child: Container(
+        height: 40,
+        padding: EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CommonText(
+              selectedFilter.label,
+              style: TextStyle(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.white,
+              ),
+            ),
+            sbw(4),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: AppColors.white,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -147,7 +549,8 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      height: 118.h,
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(22),
@@ -169,7 +572,7 @@ class _StatCard extends StatelessWidget {
           CommonText(
             value,
             style: TextStyle(
-              fontSize: 17.sp,
+              fontSize: 30.h,
               fontWeight: FontWeight.w700,
               color: valueColor,
             ),
@@ -312,11 +715,7 @@ class _GoalCard extends StatelessWidget {
               color: AppColors.white.withValues(alpha: 0.14),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              AppIcons.celebration,
-              color: AppColors.white,
-              size: 34,
-            ),
+            child: Icon(AppIcons.celebration, color: AppColors.white, size: 34),
           ),
         ],
       ),
@@ -489,11 +888,6 @@ class HomeTabData {
           label: AppStrings.expenses,
           value: '₹36,800',
           valueColor: AppColors.red,
-        ),
-        HomeTopStatData(
-          label: AppStrings.balance,
-          value: '₹45,200',
-          valueColor: AppColors.primaryDark,
         ),
       ],
       budgetAlert: HomeBudgetAlertData(

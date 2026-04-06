@@ -80,9 +80,9 @@ class SmsBloc extends Bloc<SmsEvent, SmsState> {
         }
       }
 
-      for (final SmsTransaction item in parsed) {
-        debugPrint(jsonEncode(item.toLedgerJson()));
-      }
+      // for (final SmsTransaction item in parsed) {
+      //   debugPrint(jsonEncode(item.toLedgerJson()));
+      // }
 
       emit(SmsLoaded(parsed));
     } catch (e, stackTrace) {

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import "package:flutter_screenutil/flutter_screenutil.dart";
 import 'package:flutter/material.dart';
 import 'package:kharcha/components/common_text.dart';
@@ -94,7 +96,8 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: PageView(
               controller: _pageController,
-              physics: const NeverScrollableScrollPhysics(), // Disable swipe, use bottom bar
+              physics:
+                  const NeverScrollableScrollPhysics(), // Disable swipe, use bottom bar
               children: _tabScreens,
               onPageChanged: (index) {
                 setState(() {
@@ -124,6 +127,39 @@ class _SharedTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+    final String normalizedEmail = (currentUser?.email ?? '')
+        .trim()
+        .toLowerCase();
+
+    if (normalizedEmail.isEmpty) {
+      return _buildBar(photoUrl: (currentUser?.photoURL ?? '').trim());
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(normalizedEmail)
+          .snapshots(),
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
+          ) {
+            final Map<String, dynamic>? userData = snapshot.data?.data();
+            final String firestorePhoto =
+                (userData?['photoUrl'] as String?)?.trim() ?? '';
+            final String fallbackPhoto = (currentUser?.photoURL ?? '').trim();
+            final String resolvedPhoto = firestorePhoto.isNotEmpty
+                ? firestorePhoto
+                : fallbackPhoto;
+
+            return _buildBar(photoUrl: resolvedPhoto);
+          },
+    );
+  }
+
+  Widget _buildBar({required String photoUrl}) {
     return Container(
       color: AppColors.whiteBg,
       child: SafeArea(
@@ -141,13 +177,32 @@ class _SharedTopBar extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: ClipOval(
-                
-                  child: Image.asset(
-                    AppImage.profilePlaceHolder,
-                    width: 24,
-                    height: 24,
-                    fit: BoxFit.cover,
-                  ),
+                  child: photoUrl.isEmpty
+                      ? Image.asset(
+                          AppImage.profilePlaceHolder,
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.cover,
+                        )
+                      : Image.network(
+                          photoUrl,
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.cover,
+                          errorBuilder:
+                              (
+                                BuildContext context,
+                                Object error,
+                                StackTrace? stackTrace,
+                              ) {
+                                return Image.asset(
+                                  AppImage.profilePlaceHolder,
+                                  width: 24,
+                                  height: 24,
+                                  fit: BoxFit.cover,
+                                );
+                              },
+                        ),
                 ),
                 // child: Icon(AppIcons.person, color: AppColors.greyDark, size: 24),
               ),
@@ -216,7 +271,8 @@ class _CustomBottomBar extends StatelessWidget {
                   margin: EdgeInsets.symmetric(horizontal: 2),
                   padding: EdgeInsets.symmetric(vertical: 14, horizontal: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.transparent, // Remove background from container
+                    color: AppColors
+                        .transparent, // Remove background from container
                     borderRadius: BorderRadius.circular(26),
                   ),
                   child: Column(
@@ -224,15 +280,22 @@ class _CustomBottomBar extends StatelessWidget {
                     children: [
                       // Active background only around icon
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12.sp, vertical: 6),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12.sp,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: isActive ? AppColors.primaryLight : AppColors.transparent,
+                          color: isActive
+                              ? AppColors.primaryLight
+                              : AppColors.transparent,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Icon(
                           item.icon,
                           size: 28,
-                          color: isActive ? AppColors.primaryDark : AppColors.greyDark,
+                          color: isActive
+                              ? AppColors.primaryDark
+                              : AppColors.greyDark,
                         ),
                       ),
                       SizedBox(height: 6.h),
@@ -249,7 +312,8 @@ class _CustomBottomBar extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.6,
                             color: isActive
-                                ? AppColors.primary // Active label color matches active theme
+                                ? AppColors
+                                      .primary // Active label color matches active theme
                                 : AppColors.greyDark,
                           ),
                         ),
