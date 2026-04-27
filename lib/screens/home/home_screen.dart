@@ -13,6 +13,7 @@ import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_icons.dart';
 import 'package:kharcha/utils/constants/app_image.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
+import 'package:kharcha/utils/drive/transaction_repository.dart';
 import 'package:kharcha/utils/my_cm.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -78,8 +79,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: 55.sp,
                 height: 50.sp,
                 child: FloatingActionButton(
-                  onPressed: () {
-                    callNextScreen(context, AddExpenseScreen());
+                  onPressed: () async {
+                    final Object? result = await callNextScreenWithResult(
+                      context,
+                      AddExpenseScreen(),
+                    );
+                    if (result == true) {
+                      // Refresh the shared repository so both Home and Ledger
+                      // update immediately without waiting for the auto-sync timer
+                      await TransactionRepository.instance.loadTransactions(
+                        forceRefresh: true,
+                      );
+                    }
                   },
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.white,
@@ -96,8 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: PageView(
               controller: _pageController,
-              physics:
-                  const NeverScrollableScrollPhysics(), // Disable swipe, use bottom bar
+              physics: const NeverScrollableScrollPhysics(),
               children: _tabScreens,
               onPageChanged: (index) {
                 setState(() {
@@ -168,43 +178,33 @@ class _SharedTopBar extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                padding: EdgeInsets.only(top: 5, bottom: 0, left: 5, right: 5),
-                decoration: const BoxDecoration(
-                  color: AppColors.grey,
-                  shape: BoxShape.circle,
-                ),
-                child: ClipOval(
-                  child: photoUrl.isEmpty
-                      ? Image.asset(
-                          AppImage.profilePlaceHolder,
-                          width: 24,
-                          height: 24,
-                          fit: BoxFit.cover,
-                        )
-                      : Image.network(
-                          photoUrl,
-                          width: 24,
-                          height: 24,
-                          fit: BoxFit.cover,
-                          errorBuilder:
-                              (
-                                BuildContext context,
-                                Object error,
-                                StackTrace? stackTrace,
-                              ) {
-                                return Image.asset(
-                                  AppImage.profilePlaceHolder,
-                                  width: 24,
-                                  height: 24,
-                                  fit: BoxFit.cover,
-                                );
-                              },
-                        ),
-                ),
-                // child: Icon(AppIcons.person, color: AppColors.greyDark, size: 24),
+              ClipOval(
+                child: photoUrl.isEmpty
+                    ? Image.asset(
+                        AppImage.profilePlaceHolder,
+                        width: 42,
+                        height: 42,
+                        fit: BoxFit.cover,
+                      )
+                    : Image.network(
+                        photoUrl,
+                        width: 42,
+                        height: 42,
+                        fit: BoxFit.cover,
+                        errorBuilder:
+                            (
+                              BuildContext context,
+                              Object error,
+                              StackTrace? stackTrace,
+                            ) {
+                              return Image.asset(
+                                AppImage.profilePlaceHolder,
+                                width: 42,
+                                height: 42,
+                                fit: BoxFit.cover,
+                              );
+                            },
+                      ),
               ),
               Spacer(),
               CommonText(

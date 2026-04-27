@@ -13,11 +13,11 @@ import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
 import 'package:kharcha/utils/anim/marquee_text.dart';
 import 'package:kharcha/utils/drive/drive_backup_service.dart';
+import 'package:kharcha/utils/drive/transaction_repository.dart';
 import 'package:kharcha/utils/sms/sms_transaction.dart';
 import 'package:kharcha/utils/my_cm.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:kharcha/utils/drive/drive_read_service.dart';
 
 class LedgerTabScreen extends StatefulWidget {
   const LedgerTabScreen({super.key});
@@ -26,7 +26,8 @@ class LedgerTabScreen extends StatefulWidget {
   State<LedgerTabScreen> createState() => LedgerTabScreenState();
 }
 
-class LedgerTabScreenState extends State<LedgerTabScreen> {
+class LedgerTabScreenState extends State<LedgerTabScreen>
+    with AutomaticKeepAliveClientMixin {
   static const String _allMethodFilter = 'ALL';
 
   static const List<String> _baseMethodFilters = <String>[
@@ -43,8 +44,8 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
   static const int _pageSize = 25;
 
   final ScrollController _scrollController = ScrollController();
-  late DriveReadService _driveReadService;
   late DriveBackupService _driveBackupService;
+  final TransactionRepository _repo = TransactionRepository.instance;
   Timer? _autoSyncTimer;
   List<SmsTransaction> _transactions = const <SmsTransaction>[];
   bool _isInitialLoading = true;
@@ -56,16 +57,26 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
   int _lastFilteredCount = 0;
 
   _LedgerTimeFilter _selectedTimeFilter = _LedgerTimeFilter.thisYear;
-  _LedgerDirectionFilter _selectedDirectionFilter =
-      _LedgerDirectionFilter.all;
+  _LedgerDirectionFilter _selectedDirectionFilter = _LedgerDirectionFilter.all;
   String _selectedMethodFilter = _allMethodFilter;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _driveReadService = DriveReadService();
     _driveBackupService = DriveBackupService();
+
+    // Listen to repository updates so the ledger refreshes when data changes
+    _repo.transactionsNotifier.addListener(_onTransactionsUpdated);
+    _repo.isLoadingNotifier.addListener(_onLoadingStateChanged);
+
+    // Seed from cache immediately (avoids showing empty list if data is already loaded)
+    _transactions = _repo.transactions;
+    _isInitialLoading = _repo.isLoading || !_repo.hasLoaded;
+
     _checkAndLoadDriveTransactions();
     _autoSyncTimer = Timer.periodic(
       const Duration(seconds: 30),
@@ -78,9 +89,29 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
     _autoSyncTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _repo.transactionsNotifier.removeListener(_onTransactionsUpdated);
+    _repo.isLoadingNotifier.removeListener(_onLoadingStateChanged);
     super.dispose();
   }
-  
+
+  void _onTransactionsUpdated() {
+    if (!mounted) return;
+    setState(() {
+      _transactions = _repo.transactions;
+      _isInitialLoading = false;
+    });
+  }
+
+  void _onLoadingStateChanged() {
+    if (!mounted) return;
+    // Only show the loading shimmer when we have no data yet
+    if (_repo.isLoading && _transactions.isEmpty) {
+      setState(() {
+        _isInitialLoading = true;
+      });
+    }
+  }
+
   Future<void> _checkAndLoadDriveTransactions() async {
     final User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
@@ -113,7 +144,8 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
               .doc(userEmail)
               .get();
       final Map<String, dynamic>? userData = userSnapshot.data();
-      final bool driveGranted = (userData?['driveAccessGranted'] as bool?) ?? false;
+      final bool driveGranted =
+          (userData?['driveAccessGranted'] as bool?) ?? false;
 
       if (driveGranted && mounted) {
         setState(() {
@@ -125,7 +157,8 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
         setState(() {
           _isInitialLoading = false;
           _isPermissionDenied = true;
-          _ledgerError = 'Google Drive access is required to show transactions.';
+          _ledgerError =
+              'Google Drive access is required to show transactions.';
         });
       }
     } catch (_) {
@@ -145,25 +178,16 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
     }
 
     try {
-      final List<SmsTransaction> driveTransactions =
-          await _driveReadService.readTransactionsFromDrive();
+      // Use the shared repository so Home tab also gets the updated data
+      await _repo.loadTransactions(forceRefresh: true);
       if (mounted) {
         setState(() {
-          if (driveTransactions.isNotEmpty) {
-            _transactions = driveTransactions;
-            _isInitialLoading = false;
-            _isPermissionDenied = false;
-            _ledgerError = null;
-            _visibleTransactionsLimit = _pageSize;
-            _lastFilteredCount = _transactions.length;
-          } else {
-            _transactions = <SmsTransaction>[];
-            _isInitialLoading = false;
-            _isPermissionDenied = false;
-            _ledgerError = null;
-            _visibleTransactionsLimit = _pageSize;
-            _lastFilteredCount = 0;
-          }
+          _transactions = _repo.transactions;
+          _isInitialLoading = false;
+          _isPermissionDenied = false;
+          _ledgerError = null;
+          _visibleTransactionsLimit = _pageSize;
+          _lastFilteredCount = _transactions.length;
         });
       }
     } catch (_) {
@@ -195,7 +219,11 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
       );
 
       if (result is SmsLoaded && result.transactions.isNotEmpty) {
-        await _driveBackupService.backupTransactionsToDrive(result.transactions);
+        await _driveBackupService.backupTransactionsToDrive(
+          result.transactions,
+        );
+        // After backup, do a fresh Drive read so we get the merged/deduplicated
+        // list, then push it through the repository so Home tab updates too.
         await _loadDriveTransactions();
         return;
       }
@@ -249,34 +277,47 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
       }
 
       setState(() {
-        _visibleTransactionsLimit =
-            (_visibleTransactionsLimit + _pageSize).clamp(0, _lastFilteredCount);
+        _visibleTransactionsLimit = (_visibleTransactionsLimit + _pageSize)
+            .clamp(0, _lastFilteredCount);
         _isLoadingMore = false;
       });
     });
   }
 
   Future<void> _onRefresh() async {
-    await _syncLatestTransactionsFromSms();
+    // Show shimmer immediately instead of keeping the RefreshIndicator spinner
+    if (mounted) {
+      setState(() {
+        _isInitialLoading = true;
+      });
+    }
+    // Fire the sync but don't await it — the RefreshIndicator completes
+    // right away and the shimmer stays until _loadDriveTransactions finishes
+    // (which sets _isInitialLoading = false via _onTransactionsUpdated).
+    unawaited(_syncLatestTransactionsFromSms());
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<String> methodFilters = _buildMethodFilters(
-      _transactions,
-    );
+    super.build(context); // required by AutomaticKeepAliveClientMixin
+    final List<String> methodFilters = _buildMethodFilters(_transactions);
     if (!methodFilters.contains(_selectedMethodFilter)) {
       _selectedMethodFilter = _allMethodFilter;
     }
 
     final List<SmsTransaction> filtered = _applyFilter(_transactions);
     _lastFilteredCount = filtered.length;
-    final int visibleCount = _visibleTransactionsLimit.clamp(0, _lastFilteredCount);
-    final List<SmsTransaction> visibleFiltered =
-        filtered.take(visibleCount).toList();
+    final int visibleCount = _visibleTransactionsLimit.clamp(
+      0,
+      _lastFilteredCount,
+    );
+    final List<SmsTransaction> visibleFiltered = filtered
+        .take(visibleCount)
+        .toList();
     final bool hasMoreToLoad = visibleCount < _lastFilteredCount;
-    final List<_LedgerListEntry> listEntries =
-        _buildListEntries(visibleFiltered);
+    final List<_LedgerListEntry> listEntries = _buildListEntries(
+      visibleFiltered,
+    );
 
     return RefreshIndicator(
       onRefresh: _onRefresh,
@@ -286,141 +327,128 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CommonText(
-                          AppStrings.activity,
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            letterSpacing: 2.0,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF6C727A),
-                          ),
-                        ),
-                        sb(4),
-                        CommonText(
-                          AppStrings.transactions,
-                          style: TextStyle(
-                            fontSize: 36.sp,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1B2023),
-                          ),
-                        ),
-                        sb(12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _FilterDropdown<_LedgerTimeFilter>(
-                                value: _selectedTimeFilter,
-                                items: _LedgerTimeFilter.values,
-                                itemLabelBuilder: (
-                                  _LedgerTimeFilter value,
-                                ) => value.label,
-                                onSelected: (
-                                  _LedgerTimeFilter selected,
-                                ) {
-                                  setState(() {
-                                    _selectedTimeFilter = selected;
-                                    _visibleTransactionsLimit = _pageSize;
-                                    _isLoadingMore = false;
-                                  });
-                                },
-                              ),
-                            ),
-                            sbw(10),
-                            Expanded(
-                              child: _FilterDropdown<_LedgerDirectionFilter>(
-                                value: _selectedDirectionFilter,
-                                items: _LedgerDirectionFilter.values,
-                                itemLabelBuilder: (
-                                  _LedgerDirectionFilter value,
-                                ) => value.label,
-                                onSelected: (
-                                  _LedgerDirectionFilter selected,
-                                ) {
-                                  setState(() {
-                                    _selectedDirectionFilter = selected;
-                                    _visibleTransactionsLimit = _pageSize;
-                                    _isLoadingMore = false;
-                                  });
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        sb(12),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: List<Widget>.generate(
-                              methodFilters.length,
-                              (int index) {
-                                final String method = methodFilters[index];
-                                return Padding(
-                                  padding: EdgeInsets.only(
-                                    right: index == methodFilters.length - 1
-                                        ? 0
-                                        : 8,
-                                  ),
-                                  child: _MethodChip(
-                                    label: _methodLabel(method),
-                                    isSelected: _selectedMethodFilter == method,
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedMethodFilter = method;
-                                        _visibleTransactionsLimit = _pageSize;
-                                        _isLoadingMore = false;
-                                      });
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, 10, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CommonText(
+                    AppStrings.activity,
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      letterSpacing: 2.0,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6C727A),
                     ),
                   ),
-                ),
-                SliverToBoxAdapter(child: sb(18)),
-                ..._buildBodySlivers(
-                  isLoading: _isInitialLoading && _transactions.isEmpty,
-                  isPermissionDenied: _isPermissionDenied,
-                  errorMessage: _ledgerError,
-                  listEntries: listEntries,
-                ),
-                SliverToBoxAdapter(
-                  child: _isLoadingMore
-                      ? Padding(
-                          padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-                          child: const CommonShimmerList(count: 1),
-                        )
-                      : SizedBox(height: hasMoreToLoad ? 28.h : 18.h),
-                ),
+                  sb(4),
+                  CommonText(
+                    AppStrings.transactions,
+                    style: TextStyle(
+                      fontSize: 36.sp,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1B2023),
+                    ),
+                  ),
+                  sb(12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _FilterDropdown<_LedgerTimeFilter>(
+                          value: _selectedTimeFilter,
+                          items: _LedgerTimeFilter.values,
+                          itemLabelBuilder: (_LedgerTimeFilter value) =>
+                              value.label,
+                          onSelected: (_LedgerTimeFilter selected) {
+                            setState(() {
+                              _selectedTimeFilter = selected;
+                              _visibleTransactionsLimit = _pageSize;
+                              _isLoadingMore = false;
+                            });
+                          },
+                        ),
+                      ),
+                      sbw(10),
+                      Expanded(
+                        child: _FilterDropdown<_LedgerDirectionFilter>(
+                          value: _selectedDirectionFilter,
+                          items: _LedgerDirectionFilter.values,
+                          itemLabelBuilder: (_LedgerDirectionFilter value) =>
+                              value.label,
+                          onSelected: (_LedgerDirectionFilter selected) {
+                            setState(() {
+                              _selectedDirectionFilter = selected;
+                              _visibleTransactionsLimit = _pageSize;
+                              _isLoadingMore = false;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  sb(12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: List<Widget>.generate(methodFilters.length, (
+                        int index,
+                      ) {
+                        final String method = methodFilters[index];
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            right: index == methodFilters.length - 1 ? 0 : 8,
+                          ),
+                          child: _MethodChip(
+                            label: _methodLabel(method),
+                            isSelected: _selectedMethodFilter == method,
+                            onTap: () {
+                              setState(() {
+                                _selectedMethodFilter = method;
+                                _visibleTransactionsLimit = _pageSize;
+                                _isLoadingMore = false;
+                              });
+                            },
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(child: sb(18)),
+          ..._buildBodySlivers(
+            isLoading: _isInitialLoading && _transactions.isEmpty,
+            isPermissionDenied: _isPermissionDenied,
+            errorMessage: _ledgerError,
+            listEntries: listEntries,
+          ),
+          SliverToBoxAdapter(
+            child: _isLoadingMore
+                ? Padding(
+                    padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+                    child: const CommonShimmerList(count: 1),
+                  )
+                : SizedBox(height: hasMoreToLoad ? 28.h : 18.h),
+          ),
         ],
       ),
     );
   }
 
-  List<Widget> _buildBodySlivers(
-    {
+  List<Widget> _buildBodySlivers({
     required bool isLoading,
     required bool isPermissionDenied,
     required String? errorMessage,
     required List<_LedgerListEntry> listEntries,
-  }
-  ) {
+  }) {
     if (isLoading) {
       return <Widget>[
         SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: 20),
-          sliver: const SliverToBoxAdapter(
-            child: CommonShimmerList(count: 6),
-          ),
+          sliver: const SliverToBoxAdapter(child: CommonShimmerList(count: 6)),
         ),
       ];
     }
@@ -472,14 +500,14 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
       SliverPadding(
         padding: EdgeInsets.symmetric(horizontal: 20),
         sliver: SliverList(
-          delegate: SliverChildBuilderDelegate((BuildContext context, int index) {
+          delegate: SliverChildBuilderDelegate((
+            BuildContext context,
+            int index,
+          ) {
             final _LedgerListEntry entry = listEntries[index];
             if (entry.isSection) {
               return Padding(
-                padding: EdgeInsets.only(
-                  top: index == 0 ? 0 : 8,
-                  bottom: 10,
-                ),
+                padding: EdgeInsets.only(top: index == 0 ? 0 : 8, bottom: 10),
                 child: _LedgerSectionTitle(title: entry.sectionTitle!),
               );
             }
@@ -496,10 +524,11 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
 
   List<SmsTransaction> _applyFilter(List<SmsTransaction> transactions) {
     final DateTime now = DateTime.now();
-    final DateTime startOfWeek =
-        DateTime(now.year, now.month, now.day).subtract(
-      Duration(days: now.weekday - 1),
-    );
+    final DateTime startOfWeek = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
     final DateTime endOfWeek = startOfWeek.add(const Duration(days: 7));
     final DateTime startOfYear = DateTime(now.year, 1, 1);
     final DateTime nextYear = DateTime(now.year + 1, 1, 1);
@@ -530,9 +559,7 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
           _selectedMethodFilter == _allMethodFilter ||
           _normalizeMethod(item.method) == _selectedMethodFilter;
 
-      return matchesTimeFilter &&
-          matchesDirectionFilter &&
-          matchesMethodFilter;
+      return matchesTimeFilter && matchesDirectionFilter && matchesMethodFilter;
     }).toList();
   }
 
@@ -579,8 +606,7 @@ class LedgerTabScreenState extends State<LedgerTabScreen> {
     if (normalized.contains('IMPS')) {
       return 'IMPS';
     }
-    if (normalized.contains('RTGS') ||
-        normalized.contains('BANK TRANSFER')) {
+    if (normalized.contains('RTGS') || normalized.contains('BANK TRANSFER')) {
       return 'RTGS';
     }
     if (normalized.contains('CARD')) {
@@ -763,12 +789,7 @@ class _MethodChip extends StatelessWidget {
   }
 }
 
-enum _LedgerTimeFilter {
-  allTime,
-  thisYear,
-  thisWeek,
-  today,
-}
+enum _LedgerTimeFilter { allTime, thisYear, thisWeek, today }
 
 extension _LedgerTimeFilterLabel on _LedgerTimeFilter {
   String get label {
@@ -781,11 +802,7 @@ extension _LedgerTimeFilterLabel on _LedgerTimeFilter {
   }
 }
 
-enum _LedgerDirectionFilter {
-  all,
-  credited,
-  debited,
-}
+enum _LedgerDirectionFilter { all, credited, debited }
 
 extension _LedgerDirectionFilterLabel on _LedgerDirectionFilter {
   String get label {
@@ -834,8 +851,9 @@ class _TransactionTile extends StatelessWidget {
         iconColor: AppColors.primary,
         iconBackground: Color(0xFFD6E6E0),
         amountColor: AppColors.primary,
-        trailingText:
-            normalizedMethod.isEmpty ? AppStrings.tagNow : normalizedMethod,
+        trailingText: normalizedMethod.isEmpty
+            ? AppStrings.tagNow
+            : normalizedMethod,
         trailingTextColor: AppColors.primary,
         trailingBackground: Color(0xFFD8EBE4),
         showAccent: false,
@@ -867,7 +885,9 @@ class _TransactionTile extends StatelessWidget {
       iconColor: iconColor,
       iconBackground: Color(0xFFE9EAEB),
       amountColor: Color(0xFF1F2529),
-      trailingText: normalizedMethod.isEmpty ? AppStrings.tagNow : normalizedMethod,
+      trailingText: normalizedMethod.isEmpty
+          ? AppStrings.tagNow
+          : normalizedMethod,
       trailingTextColor: AppColors.primary,
       trailingBackground: AppColors.transparent,
       showAccent: true,
@@ -959,7 +979,7 @@ class _TransactionTile extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: 22,
-                     child: MarqueePlus(
+                      child: MarqueePlus(
                         text: data.displaySenderLabel,
                         initialDelay: Duration(seconds: 2),
                         velocity: 25,
@@ -1026,10 +1046,7 @@ class _TransactionTile extends StatelessWidget {
                   ),
                   sb(4),
                   Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: visual.trailingBackground,
                       borderRadius: BorderRadius.circular(8),

@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:kharcha/components/common_shimmer.dart';
 import 'package:kharcha/components/common_text.dart';
-import 'package:kharcha/utils/drive/drive_read_service.dart';
+import 'package:kharcha/utils/drive/transaction_repository.dart';
 import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_icons.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
@@ -33,43 +35,63 @@ class HomeTabScreen extends StatefulWidget {
   State<HomeTabScreen> createState() => _HomeTabScreenState();
 }
 
-class _HomeTabScreenState extends State<HomeTabScreen> {
+class _HomeTabScreenState extends State<HomeTabScreen>
+    with AutomaticKeepAliveClientMixin {
   _HomeRangeFilter _selectedFilter = _HomeRangeFilter.today;
-  late final DriveReadService _driveReadService;
+
+  // Sourced from the shared repository — no direct Drive calls here
+  final TransactionRepository _repo = TransactionRepository.instance;
+
   List<SmsTransaction> _transactions = <SmsTransaction>[];
   bool _isLoadingTransactions = true;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
-    _driveReadService = DriveReadService();
-    _loadTransactions();
+    // Listen to repository updates so the home screen refreshes whenever
+    // the Ledger tab syncs new data (without an extra Drive read).
+    _repo.transactionsNotifier.addListener(_onTransactionsUpdated);
+    _repo.isLoadingNotifier.addListener(_onLoadingStateChanged);
+
+    // Seed from cache immediately (avoids showing 0 if data is already loaded)
+    _transactions = _repo.transactions;
+    _isLoadingTransactions = _repo.isLoading || !_repo.hasLoaded;
+
+    // Kick off a load only if the cache is empty
+    _repo.loadTransactions();
   }
 
-  Future<void> _loadTransactions() async {
-    if (!mounted) {
-      return;
-    }
+  @override
+  void dispose() {
+    _repo.transactionsNotifier.removeListener(_onTransactionsUpdated);
+    _repo.isLoadingNotifier.removeListener(_onLoadingStateChanged);
+    super.dispose();
+  }
 
+  void _onTransactionsUpdated() {
+    if (!mounted) return;
     setState(() {
-      _isLoadingTransactions = true;
-    });
-
-    final List<SmsTransaction> transactions = await _driveReadService
-        .readTransactionsFromDrive();
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _transactions = transactions;
+      _transactions = _repo.transactions;
       _isLoadingTransactions = false;
     });
   }
 
+  void _onLoadingStateChanged() {
+    if (!mounted) return;
+    // Only show the loading shimmer when we have no data yet
+    if (_repo.isLoading && _transactions.isEmpty) {
+      setState(() {
+        _isLoadingTransactions = true;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     final HomeTabData data = widget.data ?? HomeTabData.demo();
     final User? currentUser = FirebaseAuth.instance.currentUser;
     final String normalizedEmail = (currentUser?.email ?? '')
@@ -103,6 +125,16 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
             return _buildDashboard(data: data, greeting: greeting);
           },
     );
+  }
+
+  Future<void> _onRefresh() async {
+    // Show shimmer immediately, fire refresh in background
+    if (mounted) {
+      setState(() {
+        _isLoadingTransactions = true;
+      });
+    }
+    unawaited(_repo.loadTransactions(forceRefresh: true));
   }
 
   Widget _buildDashboard({
@@ -146,40 +178,46 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
       ),
     ];
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (isLoading)
-            const _SpendSummaryShimmer()
-          else
-            _SpendSummary(
-              greeting: "$greeting!",
-              totalSpendValue: totalSpendValue,
-              totalSpendLabel: "Total",
-              selectedFilter: _selectedFilter,
-              onFilterChanged: (_HomeRangeFilter selected) {
-                setState(() {
-                  _selectedFilter = selected;
-                });
-              },
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      backgroundColor: AppColors.white,
+      color: AppColors.primary,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isLoading)
+              const _SpendSummaryShimmer()
+            else
+              _SpendSummary(
+                greeting: "$greeting!",
+                totalSpendValue: totalSpendValue,
+                totalSpendLabel: "Total",
+                selectedFilter: _selectedFilter,
+                onFilterChanged: (_HomeRangeFilter selected) {
+                  setState(() {
+                    _selectedFilter = selected;
+                  });
+                },
+              ),
+            sb(20),
+            if (isLoading)
+              const _TopStatsRowShimmer()
+            else
+              _TopStatsRow(stats: topStats),
+            sb(20),
+            _BudgetAlertCard(
+              title: data.budgetAlert.title,
+              description: data.budgetAlert.description,
             ),
-          sb(20),
-          if (isLoading)
-            const _TopStatsRowShimmer()
-          else
-            _TopStatsRow(stats: topStats),
-          sb(20),
-          _BudgetAlertCard(
-            title: data.budgetAlert.title,
-            description: data.budgetAlert.description,
-          ),
-          sb(20),
-          _GoalCard(data: data.goalCard),
-          sb(20),
-          _BudgetProgressCard(data: data.budgetProgress),
-        ],
+            sb(20),
+            _GoalCard(data: data.goalCard),
+            sb(20),
+            _BudgetProgressCard(data: data.budgetProgress),
+          ],
+        ),
       ),
     );
   }

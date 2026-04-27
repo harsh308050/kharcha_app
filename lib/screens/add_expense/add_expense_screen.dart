@@ -139,7 +139,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       final String tempAmount = '$_amount$key';
       final List<String> parts = tempAmount.split('.');
       final String integerPart = parts[0];
-      
+
       // Check if we would exceed 8 total digits
       if (integerPart.replaceFirst(RegExp(r'^0+'), '').length > 8) {
         return;
@@ -276,9 +276,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    if (merchant.isEmpty ||
-        method.isEmpty ||
-        note.isEmpty) {
+    if (merchant.isEmpty || method.isEmpty || note.isEmpty) {
       showSnackBar(
         context,
         'Please fill all required transaction details.',
@@ -294,7 +292,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final DateTime transactionDate = _selectedDateTime;
     final String selectedCategory = _categories[_selectedCategory].label;
     final String generatedReference =
-      'manual-${transactionDate.millisecondsSinceEpoch}-${parsedAmount.toStringAsFixed(2).replaceAll('.', '')}';
+        'manual-${transactionDate.millisecondsSinceEpoch}-${parsedAmount.toStringAsFixed(2).replaceAll('.', '')}';
     final SmsTransaction transaction = SmsTransaction(
       rawMessage:
           '[MANUAL] ${_isDebit ? 'Debit' : 'Credit'} ₹${parsedAmount.toStringAsFixed(2)} via $method on ${_formatDate(_selectedDate)} ${_formatTime(_selectedTime)}. Merchant: $merchant. Note: $note',
@@ -323,7 +321,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       }
 
       if (result.success) {
-        showSnackBar(context, 'Transaction added to Drive.', AppColors.primary);
+        // Pop back with true so the caller knows to refresh data
         Navigator.of(context).pop(true);
       } else {
         showSnackBar(context, result.message, AppColors.red);
@@ -367,287 +365,294 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: Icon(
-                      Icons.close,
-                      color: Color(0xFF3E4343),
-                      size: 26,
-                    ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: CommonText(
-                        _isDebit ? 'Add Expense' : 'Add Income',
-                        style: TextStyle(
-                          fontSize: 22.sp,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF202626),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 48.w),
-                ],
-              ),
-              sb(18),
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _isDebit = true;
-                        });
-                      },
-                      child: Container(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: _isDebit ? AppColors.primary : Colors.transparent,
-                              width: _isDebit ? 3 : 0,
-                            ),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: Icon(
+                            Icons.close,
+                            color: Color(0xFF3E4343),
+                            size: 26,
                           ),
                         ),
-                        child: Center(
-                          child: CommonText(
-                            'Expense',
-                            style: TextStyle(
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w600,
-                              color: _isDebit ? AppColors.primary : Color(0xFF8B98A5),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _isDebit = false;
-                        });
-                      },
-                      child: Container(
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: !_isDebit ? AppColors.primary : Colors.transparent,
-                              width: !_isDebit ? 3 : 0,
-                            ),
-                          ),
-                        ),
-                        child: Center(
-                          child: CommonText(
-                            'Income',
-                            style: TextStyle(
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w600,
-                              color: !_isDebit ? AppColors.primary : Color(0xFF8B98A5),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              sb(24),
-              Center(
-                child: CommonText(
-                  'TOTAL AMOUNT',
-                  style: TextStyle(
-                    fontSize: 12.sp,
-                    letterSpacing: 2.2,
-                    color: Color(0xFF6B7070),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              sb(6),
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.only(bottom: 10),
-                      child: CommonText(
-                          '₹',
-                        style: TextStyle(
-                          fontSize: 22.sp,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF9EA1A1),
-                        ),
-                      ),
-                    ),
-                    CommonText(
-                      _amount,
-                      style: TextStyle(
-                        fontSize: 54.sp,
-                        height: 0.95,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF111516),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              sb(22),
-              CommonText(
-                'SELECT CATEGORY',
-                style: TextStyle(
-                  fontSize: 12.sp,
-                  letterSpacing: 2.0,
-                  color: Color(0xFF5E6464),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              sb(14),
-              SizedBox(
-                height: 104,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                    itemCount: _categories.length,
-                      separatorBuilder: (_, _) => sbw(2),
-                  itemBuilder: (BuildContext context, int index) {
-                    final bool isSelected = _selectedCategory == index;
-                    final _CategoryItemData item = _categories[index];
-
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedCategory = index;
-                        });
-                      },
-                      child: SizedBox(
-                        width: 78,
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : const Color(0xFFEAECEA),
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: isSelected
-                                    ? [
-                                        BoxShadow(
-                                          color: AppColors.primary.withValues(
-                                            alpha: 0.26,
-                                          ),
-                                          blurRadius: 20,
-                                          offset: const Offset(0, 10),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Icon(
-                                item.icon,
-                                size: 24,
-                                color: isSelected
-                                    ? AppColors.white
-                                    : const Color(0xFF505554),
-                              ),
-                            ),
-                            sb(6),
-                            CommonText(
-                              item.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
+                        Expanded(
+                          child: Center(
+                            child: CommonText(
+                              _isDebit ? 'Add Expense' : 'Add Income',
                               style: TextStyle(
-                                fontSize: 14.sp,
-                                fontWeight: FontWeight.w500,
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : const Color(0xFF4A4F4F),
+                                fontSize: 22.sp,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF202626),
                               ),
                             ),
-                          ],
+                          ),
+                        ),
+                        SizedBox(width: 48.w),
+                      ],
+                    ),
+                    sb(18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isDebit = true;
+                              });
+                            },
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: _isDebit
+                                        ? AppColors.primary
+                                        : Colors.transparent,
+                                    width: _isDebit ? 3 : 0,
+                                  ),
+                                ),
+                              ),
+                              child: Center(
+                                child: CommonText(
+                                  'Expense',
+                                  style: TextStyle(
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.w600,
+                                    color: _isDebit
+                                        ? AppColors.primary
+                                        : Color(0xFF8B98A5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isDebit = false;
+                              });
+                            },
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: !_isDebit
+                                        ? AppColors.primary
+                                        : Colors.transparent,
+                                    width: !_isDebit ? 3 : 0,
+                                  ),
+                                ),
+                              ),
+                              child: Center(
+                                child: CommonText(
+                                  'Income',
+                                  style: TextStyle(
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.w600,
+                                    color: !_isDebit
+                                        ? AppColors.primary
+                                        : Color(0xFF8B98A5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    sb(24),
+                    Center(
+                      child: CommonText(
+                        'TOTAL AMOUNT',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          letterSpacing: 2.2,
+                          color: Color(0xFF6B7070),
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                    );
-                  },
-                ),
-              ),
-              sb(14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _InfoCard(
-                      title: 'DATE',
-                      value: _formatDate(_selectedDate),
-                      icon: Icons.calendar_today_outlined,
-                      onTap: _pickDate,
                     ),
-                  ),
-                  sbw(14),
-                  Expanded(
-                    child: _InfoCard(
-                      title: 'TIME',
-                      value: _formatTime(_selectedTime),
-                      icon: Icons.access_time_outlined,
-                      onTap: _pickTime,
+                    sb(6),
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: CommonText(
+                              '₹',
+                              style: TextStyle(
+                                fontSize: 22.sp,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF9EA1A1),
+                              ),
+                            ),
+                          ),
+                          CommonText(
+                            _amount,
+                            style: TextStyle(
+                              fontSize: 54.sp,
+                              height: 0.95,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF111516),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              sb(12),
-              _FormInputCard(
-                title: 'MERCHANT',
-                hintText: 'Where did you spend it?',
-                controller: _merchantController,
-                icon: Icons.storefront_outlined,
-              ),
-              sb(12),
-              _MethodDropdownCard(
-                key: _methodDropdownKey,
-                title: 'METHOD',
-                value: _selectedMethod,
-                options: _methodOptions,
-                icon: Icons.payments_outlined,
-                isExpanded: _isMethodDropdownOpen,
-                onToggle: _toggleMethodDropdown,
-                onChanged: (String value) {
-                  setState(() {
-                    _selectedMethod = value;
-                    _isMethodDropdownOpen = false;
-                  });
-                },
-              ),
-              sb(12),
-              
-              sb(12),
-              _NoteCard(controller: _noteController),
-              sb(12),
-              SizedBox(
-                height: 280,
-                child: CommonNumberPad(onKeyTap: _onKeyTap),
-              ),
-              sb(16),
-              SizedBox(
-                width: double.infinity,
-                child: CustomButton(
-                  onButtonPressed: _saveTransactionToDrive,
-                  buttonText: 'Add Transaction',
-                  isLoading: _isSavingTransaction,
-                  borderRadius: 36,
-                  backgroundColor: AppColors.primary,
-                  textColor: AppColors.white,
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              sb(12),
+                    sb(22),
+                    CommonText(
+                      'SELECT CATEGORY',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        letterSpacing: 2.0,
+                        color: Color(0xFF5E6464),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    sb(14),
+                    SizedBox(
+                      height: 104,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: _categories.length,
+                        separatorBuilder: (_, _) => sbw(2),
+                        itemBuilder: (BuildContext context, int index) {
+                          final bool isSelected = _selectedCategory == index;
+                          final _CategoryItemData item = _categories[index];
+
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedCategory = index;
+                              });
+                            },
+                            child: SizedBox(
+                              width: 78,
+                              child: Column(
+                                children: [
+                                  Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? AppColors.primary
+                                          : const Color(0xFFEAECEA),
+                                      borderRadius: BorderRadius.circular(16),
+                                      boxShadow: isSelected
+                                          ? [
+                                              BoxShadow(
+                                                color: AppColors.primary
+                                                    .withValues(alpha: 0.26),
+                                                blurRadius: 20,
+                                                offset: const Offset(0, 10),
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                    child: Icon(
+                                      item.icon,
+                                      size: 24,
+                                      color: isSelected
+                                          ? AppColors.white
+                                          : const Color(0xFF505554),
+                                    ),
+                                  ),
+                                  sb(6),
+                                  CommonText(
+                                    item.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14.sp,
+                                      fontWeight: FontWeight.w500,
+                                      color: isSelected
+                                          ? AppColors.primary
+                                          : const Color(0xFF4A4F4F),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    sb(14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _InfoCard(
+                            title: 'DATE',
+                            value: _formatDate(_selectedDate),
+                            icon: Icons.calendar_today_outlined,
+                            onTap: _pickDate,
+                          ),
+                        ),
+                        sbw(14),
+                        Expanded(
+                          child: _InfoCard(
+                            title: 'TIME',
+                            value: _formatTime(_selectedTime),
+                            icon: Icons.access_time_outlined,
+                            onTap: _pickTime,
+                          ),
+                        ),
+                      ],
+                    ),
+                    sb(12),
+                    _FormInputCard(
+                      title: 'MERCHANT',
+                      hintText: 'Where did you spend it?',
+                      controller: _merchantController,
+                      icon: Icons.storefront_outlined,
+                    ),
+                    sb(12),
+                    _MethodDropdownCard(
+                      key: _methodDropdownKey,
+                      title: 'METHOD',
+                      value: _selectedMethod,
+                      options: _methodOptions,
+                      icon: Icons.payments_outlined,
+                      isExpanded: _isMethodDropdownOpen,
+                      onToggle: _toggleMethodDropdown,
+                      onChanged: (String value) {
+                        setState(() {
+                          _selectedMethod = value;
+                          _isMethodDropdownOpen = false;
+                        });
+                      },
+                    ),
+                    sb(12),
+
+                    sb(12),
+                    _NoteCard(controller: _noteController),
+                    sb(12),
+                    SizedBox(
+                      height: 280,
+                      child: CommonNumberPad(onKeyTap: _onKeyTap),
+                    ),
+                    sb(16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: CustomButton(
+                        onButtonPressed: _saveTransactionToDrive,
+                        buttonText: 'Add Transaction',
+                        isLoading: _isSavingTransaction,
+                        borderRadius: 36,
+                        backgroundColor: AppColors.primary,
+                        textColor: AppColors.white,
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    sb(12),
                   ],
                 ),
               ),
@@ -993,7 +998,10 @@ class _MethodDropdownCard extends StatelessWidget {
                       onTap: () => onChanged(option),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         child: Row(
                           children: [
                             Expanded(
@@ -1001,8 +1009,9 @@ class _MethodDropdownCard extends StatelessWidget {
                                 option,
                                 style: TextStyle(
                                   fontSize: 15.sp,
-                                  fontWeight:
-                                      selected ? FontWeight.w700 : FontWeight.w500,
+                                  fontWeight: selected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
                                   color: selected
                                       ? AppColors.primary
                                       : const Color(0xFF2A2F33),
@@ -1054,10 +1063,7 @@ class _CupertinoPickerSheet extends StatelessWidget {
             child: Row(
               children: [
                 CupertinoButton(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   onPressed: () => Navigator.of(context).pop(),
                   child: CommonText(
                     'Cancel',
@@ -1083,10 +1089,7 @@ class _CupertinoPickerSheet extends StatelessWidget {
                   ),
                 ),
                 CupertinoButton(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   onPressed: onDone,
                   child: CommonText(
                     'Done',
