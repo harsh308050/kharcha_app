@@ -15,6 +15,7 @@ import 'package:kharcha/utils/anim/marquee_text.dart';
 import 'package:kharcha/utils/drive/drive_backup_service.dart';
 import 'package:kharcha/utils/drive/transaction_repository.dart';
 import 'package:kharcha/utils/sms/sms_transaction.dart';
+import 'package:kharcha/utils/permissions/permission_manager.dart';
 import 'package:kharcha/utils/my_cm.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -49,7 +50,8 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
   Timer? _autoSyncTimer;
   List<SmsTransaction> _transactions = const <SmsTransaction>[];
   bool _isInitialLoading = true;
-  bool _isPermissionDenied = false;
+  bool _isDrivePermissionDenied = false;
+  bool _isSmsPermissionDenied = false;
   bool _isLoadingMore = false;
   bool _isSyncingFromSms = false;
   String? _ledgerError;
@@ -118,7 +120,7 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
       if (mounted) {
         setState(() {
           _isInitialLoading = false;
-          _isPermissionDenied = true;
+          _isDrivePermissionDenied = true;
           _ledgerError = 'Please sign in to view Drive transactions.';
         });
       }
@@ -130,7 +132,7 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
       if (mounted) {
         setState(() {
           _isInitialLoading = false;
-          _isPermissionDenied = true;
+          _isDrivePermissionDenied = true;
           _ledgerError = 'Unable to identify the signed-in account.';
         });
       }
@@ -149,14 +151,14 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
 
       if (driveGranted && mounted) {
         setState(() {
-          _isPermissionDenied = false;
+          _isDrivePermissionDenied = false;
           _ledgerError = null;
         });
         _loadDriveTransactions();
       } else if (mounted) {
         setState(() {
           _isInitialLoading = false;
-          _isPermissionDenied = true;
+          _isDrivePermissionDenied = true;
           _ledgerError =
               'Google Drive access is required to show transactions.';
         });
@@ -165,7 +167,7 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
       if (mounted) {
         setState(() {
           _isInitialLoading = false;
-          _isPermissionDenied = true;
+          _isDrivePermissionDenied = true;
           _ledgerError = 'Unable to load Drive transactions.';
         });
       }
@@ -184,7 +186,7 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
         setState(() {
           _transactions = _repo.transactions;
           _isInitialLoading = false;
-          _isPermissionDenied = false;
+          _isDrivePermissionDenied = false;
           _ledgerError = null;
           _visibleTransactionsLimit = _pageSize;
           _lastFilteredCount = _transactions.length;
@@ -194,7 +196,7 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
       if (mounted) {
         setState(() {
           _isInitialLoading = false;
-          _isPermissionDenied = true;
+          _isDrivePermissionDenied = true;
           _ledgerError = 'Failed to read transactions from Drive.';
         });
       }
@@ -231,7 +233,7 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
       if (!silent && mounted) {
         setState(() {
           _isInitialLoading = false;
-          _isPermissionDenied = result is SmsPermissionDenied;
+          _isSmsPermissionDenied = result is SmsPermissionDenied;
           _ledgerError = result is SmsFailure ? result.message : _ledgerError;
         });
       }
@@ -421,7 +423,8 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
           SliverToBoxAdapter(child: sb(18)),
           ..._buildBodySlivers(
             isLoading: _isInitialLoading && _transactions.isEmpty,
-            isPermissionDenied: _isPermissionDenied,
+            isDrivePermissionDenied: _isDrivePermissionDenied,
+            isSmsPermissionDenied: _isSmsPermissionDenied,
             errorMessage: _ledgerError,
             listEntries: listEntries,
           ),
@@ -440,7 +443,8 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
 
   List<Widget> _buildBodySlivers({
     required bool isLoading,
-    required bool isPermissionDenied,
+    required bool isDrivePermissionDenied,
+    required bool isSmsPermissionDenied,
     required String? errorMessage,
     required List<_LedgerListEntry> listEntries,
   }) {
@@ -453,24 +457,69 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
       ];
     }
 
-    if (isPermissionDenied) {
-      return <Widget>[
+    final slivers = <Widget>[];
+
+    if (isSmsPermissionDenied) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Container(
+            margin: EdgeInsets.fromLTRB(20, 0, 20, 10),
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: AppColors.orange, size: 28),
+                sbw(12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CommonText('Automatic tracking disabled', 
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.sp, color: AppColors.black)),
+                      CommonText('Grant SMS permission to auto-track expenses.', 
+                          style: TextStyle(fontSize: 12.sp, color: AppColors.greyDark)),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => PermissionManager().openAppSettings(),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: CommonText('Settings', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (isDrivePermissionDenied) {
+      slivers.add(
         SliverToBoxAdapter(
           child: _StatusCard(
-            title: 'SMS permission needed',
+            title: 'Drive permission needed',
             description:
-                'Grant SMS access to load transactions automatically in your ledger.',
-            actionLabel: AppStrings.allowSMSAccess,
+                'Grant Google Drive access to load transactions from your backup.',
+            actionLabel: 'Connect Drive',
             onActionPressed: () {
-              context.read<SmsBloc>().add(const SmsFetchRequested());
+              // Should probably trigger drive connection
             },
           ),
         ),
-      ];
+      );
+      return slivers;
     }
 
     if (errorMessage != null && listEntries.isEmpty) {
-      return <Widget>[
+      slivers.add(
         SliverToBoxAdapter(
           child: _StatusCard(
             title: 'Unable to load transactions',
@@ -481,11 +530,12 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
             },
           ),
         ),
-      ];
+      );
+      return slivers;
     }
 
     if (listEntries.isEmpty) {
-      return <Widget>[
+      slivers.add(
         SliverToBoxAdapter(
           child: _StatusCard(
             title: 'No transactions found',
@@ -493,10 +543,11 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
                 'Try a different filter or pull down to refresh your SMS ledger.',
           ),
         ),
-      ];
+      );
+      return slivers;
     }
 
-    return <Widget>[
+    slivers.add(
       SliverPadding(
         padding: EdgeInsets.symmetric(horizontal: 20),
         sliver: SliverList(
@@ -519,7 +570,9 @@ class LedgerTabScreenState extends State<LedgerTabScreen>
           }, childCount: listEntries.length),
         ),
       ),
-    ];
+    );
+
+    return slivers;
   }
 
   List<SmsTransaction> _applyFilter(List<SmsTransaction> transactions) {

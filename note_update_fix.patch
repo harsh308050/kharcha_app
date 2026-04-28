@@ -1,0 +1,72 @@
+--- a/lib/utils/background/flutter_startup_reader.dart
++++ b/lib/utils/background/flutter_startup_reader.dart
+@@ -180,26 +180,13 @@
+   Future<void> _applyNoteUpdatesToExistingTransactions() async {
+     try {
+       print('=== FLUTTER NOTE UPDATE: Starting note update processing ===');
+-      final SharedPreferences prefs = await SharedPreferences.getInstance();
+-      final Set<String> keys = prefs.getKeys();
+       
+-      // Debug: Print total keys and all note-related keys
+-      print(
+-        '=== FLUTTER NOTE UPDATE: Total SharedPreferences keys: ${keys.length} ===',
+-      );
+-      for (final String key in keys) {
+-        if (key.contains('note') || key.contains('pending')) {
+-          final dynamic value = prefs.get(key);
+-          final String valueStr = value.toString();
+-          final String displayValue = valueStr.length > 100
+-              ? '${valueStr.substring(0, 100)}...'
+-              : valueStr;
+-          print('=== FLUTTER NOTE UPDATE: Key: "$key" = "$displayValue" ===');
+-        }
+-      }
++      // Use MethodChannel to read from Android's kharcha_background SharedPreferences
++      final Map<String, String> noteUpdates = await NoteBridge.getPendingNoteUpdates();
+       
+-      // Find all pending note update keys (stored by NotificationActionReceiver)
+-      final Map<String, String> noteUpdates = <String, String>{};
++      print('=== FLUTTER NOTE UPDATE: Retrieved ${noteUpdates.length} note updates from Android ===');
+       
++      for (final entry in noteUpdates.entries) {
++        print('=== FLUTTER NOTE UPDATE: Found note update for ${entry.key}: "${entry.value}" ===');
++      }
++
+@@ -273,6 +260,7 @@
+         SmsTransaction? matchingTransaction;
+ 
+         if (pendingJson != null) {
++          final SharedPreferences prefs = await SharedPreferences.getInstance();
+           // Transaction is still pending (not yet synced to Drive)
+           print(
+             '=== FLUTTER NOTE UPDATE: Transaction is still pending, will be synced with note ===',
+@@ -289,8 +277,7 @@
+             );
+ 
+             // Remove the note update request since it's been applied
+-            await prefs.remove('pending_note_update_$transactionId');
+-            await prefs.remove('pending_note_update_timestamp_$transactionId');
++            await NoteBridge.removePendingNoteUpdate(transactionId);
+             hasUpdates = true;
+             continue;
+           } catch (e) {
+@@ -327,8 +314,7 @@
+             '=== FLUTTER NOTE UPDATE: No matching transaction found for $transactionId ===',
+           );
+           // Remove the update request since we can't process it
+-          await prefs.remove('pending_note_update_$transactionId');
+-          await prefs.remove('pending_note_update_timestamp_$transactionId');
++          await NoteBridge.removePendingNoteUpdate(transactionId);
+           continue;
+         }
+ 
+@@ -350,8 +336,7 @@
+             '=== FLUTTER NOTE UPDATE: Successfully updated note in Drive ===',
+           );
+           // Remove the processed update request
+-          await prefs.remove('pending_note_update_$transactionId');
+-          await prefs.remove('pending_note_update_timestamp_$transactionId');
++          await NoteBridge.removePendingNoteUpdate(transactionId);
+           hasUpdates = true;
+         } else {
+           print(

@@ -31,6 +31,21 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                // Use JUnit Platform for Kotest property tests
+                // But also support JUnit 4 for Robolectric tests
+                it.useJUnitPlatform {
+                    // Include JUnit 4 tests as well
+                    includeEngines("junit-vintage")
+                }
+            }
+        }
     }
 
     buildTypes {
@@ -44,4 +59,28 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // WorkManager for background task scheduling
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    
+    // Testing dependencies
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
+    
+    // Mockito for mocking
+    testImplementation("org.mockito:mockito-core:5.8.0")
+    testImplementation("org.mockito:mockito-inline:5.2.0")
+    
+    // Kotest for property-based testing
+    testImplementation("io.kotest:kotest-runner-junit5:5.8.0")
+    testImplementation("io.kotest:kotest-assertions-core:5.8.0")
+    testImplementation("io.kotest:kotest-property:5.8.0")
+    
+    // JUnit Vintage engine for running JUnit 4 tests with JUnit 5 platform
+    testImplementation("org.junit.vintage:junit-vintage-engine:5.10.1")
+    
+    // Robolectric for Android unit testing
+    testImplementation("org.robolectric:robolectric:4.11.1")
 }

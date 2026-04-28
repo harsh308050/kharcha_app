@@ -10,6 +10,7 @@ import 'package:kharcha/utils/constants/app_icons.dart';
 import 'package:kharcha/utils/constants/app_image.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
 import 'package:kharcha/utils/my_cm.dart';
+import 'package:kharcha/utils/permissions/permission_manager.dart';
 
 double _responsiveFont(
   BuildContext context,
@@ -33,7 +34,8 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  final int _totalPages = 3;
+  final int _totalPages = 6;
+  final PermissionManager _permissionManager = PermissionManager();
 
   @override
   void dispose() {
@@ -89,6 +91,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     _AutoTrackingPage(),
                     _PrivacyPromisePage(),
                     _NotificationTaggingPage(),
+                    _SmsPermissionPage(),
+                    _NotificationPermissionPage(),
+                    _BatteryOptimizationPage(),
                   ],
                 ),
               ),
@@ -216,13 +221,44 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           children: [
             CustomButton(
               onButtonPressed: _goToNextPage,
-              buttonText: AppStrings.getStarted,
+              buttonText: AppStrings.next,
               showTrailingIcon: true,
               trailingIcon: Icon(AppIcons.arrowForwardIos, size: 16),
               borderRadius: 32,
             ),
           ],
         ),
+      );
+    }
+
+    if (_currentPage == 3) {
+      return _buildPermissionActions(
+        primaryText: 'Grant SMS Permission',
+        onPrimary: () async {
+          await _permissionManager.requestSmsPermission();
+          _goToNextPage();
+        },
+      );
+    }
+
+    if (_currentPage == 4) {
+      return _buildPermissionActions(
+        primaryText: 'Grant Notification Permission',
+        onPrimary: () async {
+          await _permissionManager.requestNotificationPermission();
+          _goToNextPage();
+        },
+      );
+    }
+
+    if (_currentPage == 5) {
+      return _buildPermissionActions(
+        primaryText: 'Whitelist App',
+        onPrimary: () async {
+          await _permissionManager.openBatteryOptimizationSettings();
+          _goToNextPage();
+        },
+        isLast: true,
       );
     }
 
@@ -236,6 +272,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             showTrailingIcon: true,
             trailingIcon: Icon(AppIcons.arrowForwardIos, size: 20),
             borderRadius: 32,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionActions({
+    required String primaryText,
+    required VoidCallback onPrimary,
+    bool isLast = false,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          CustomButton(
+            onButtonPressed: onPrimary,
+            buttonText: primaryText,
+            borderRadius: 32,
+          ),
+          sb(12),
+          TextButton(
+            onPressed: _goToNextPage,
+            child: CommonText(
+              isLast ? 'Skip and Get Started' : 'Skip for now',
+              style: TextStyle(
+                color: AppColors.greyDark,
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
         ],
       ),
@@ -567,6 +634,114 @@ class _PrivacyItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SmsPermissionPage extends StatelessWidget {
+  const _SmsPermissionPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, 40, 24, 20),
+      child: Column(
+        children: [
+          Icon(Icons.sms_outlined, size: 80.sp, color: AppColors.primary),
+          sb(30),
+          CommonText(
+            'SMS Permission Required',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 32.sp,
+              fontWeight: FontWeight.w900,
+              color: AppColors.black,
+            ),
+          ),
+          sb(20),
+          CommonText(
+            'To automatically track your expenses, Kharcha needs permission to read bank SMS messages. We only process transaction messages and never read your personal conversations.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16.sp,
+              height: 1.4,
+              color: AppColors.greyDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationPermissionPage extends StatelessWidget {
+  const _NotificationPermissionPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, 40, 24, 20),
+      child: Column(
+        children: [
+          Icon(Icons.notifications_active_outlined, size: 80.sp, color: AppColors.primary),
+          sb(30),
+          CommonText(
+            'Never Miss a Transaction',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 32.sp,
+              fontWeight: FontWeight.w900,
+              color: AppColors.black,
+            ),
+          ),
+          sb(20),
+          CommonText(
+            'Allow notifications so we can immediately alert you when a new transaction is detected, allowing you to categorize it instantly.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16.sp,
+              height: 1.4,
+              color: AppColors.greyDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BatteryOptimizationPage extends StatelessWidget {
+  const _BatteryOptimizationPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, 40, 24, 20),
+      child: Column(
+        children: [
+          Icon(Icons.battery_alert_outlined, size: 80.sp, color: AppColors.primary),
+          sb(30),
+          CommonText(
+            'Keep Kharcha Awake',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 32.sp,
+              fontWeight: FontWeight.w900,
+              color: AppColors.black,
+            ),
+          ),
+          sb(20),
+          CommonText(
+            'Some phone manufacturers aggressively kill background apps. To ensure Kharcha can reliably track your transactions even when closed, please whitelist it from battery optimization.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16.sp,
+              height: 1.4,
+              color: AppColors.greyDark,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

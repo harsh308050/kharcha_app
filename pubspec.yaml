@@ -21,11 +21,14 @@ dependencies:
   googleapis: ^13.2.0
   http: ^1.2.2
   shimmer: ^3.0.0
+  shared_preferences: ^2.3.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  mockito: ^5.6.4
+  build_runner: ^2.14.1
 
 flutter:
   uses-material-design: true

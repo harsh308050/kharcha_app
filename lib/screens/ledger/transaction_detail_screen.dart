@@ -52,9 +52,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   void initState() {
     super.initState();
     _merchant = widget.transaction.displaySenderLabel;
-    _category = widget.transaction.category.trim().isEmpty
+    _category = (widget.transaction.category?.trim().isEmpty ?? true)
         ? (widget.transaction.isDebit ? 'Other' : 'Income')
-        : widget.transaction.category.trim();
+        : widget.transaction.category!.trim();
     final String existingNote = widget.transaction.note.trim();
     if (existingNote.isNotEmpty) {
       _note = existingNote;

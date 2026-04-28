@@ -16,7 +16,7 @@ class SmsTransaction {
   final String counterparty;
   final String reference;
   final String date;
-  final String category;
+  final String? category;
   final String note;
 
   const SmsTransaction({
@@ -33,7 +33,7 @@ class SmsTransaction {
     required this.counterparty,
     required this.reference,
     required this.date,
-    this.category = 'Other',
+    this.category,
     this.note = 'Imported from SMS',
   });
 
@@ -90,7 +90,7 @@ class SmsTransaction {
       'reference': reference,
       'date': date,
       // User customization fields
-      'category': category,
+      'category': category ?? 'Other',
       'note': note,
       // Computed display fields for faster restoration
       'transactionDateISO': transactionDate.toIso8601String(),
@@ -119,24 +119,30 @@ class SmsTransaction {
   }
 
   String get displaySenderLabel {
+    // 1. Try mapping senderId to a known bank name (e.g., "HDFCBK" → "HDFC Bank")
     final String mappedBankName = BankSenderMapper.bankName(senderId) ?? '';
     if (mappedBankName.isNotEmpty) {
       return mappedBankName;
     }
 
-    final String normalizedSender = senderId.trim();
-    if (normalizedSender.isNotEmpty) {
-      return normalizedSender;
-    }
-
+    // 2. Use the counterparty/merchant name if available (e.g., "Amazon", "Swiggy")
     final String normalizedCounterparty = counterparty.trim();
     if (normalizedCounterparty.isNotEmpty) {
       return normalizedCounterparty;
     }
 
+    // 3. Use the bank name field (already resolved by TransactionParser on Android)
+    //    This handles cases where the senderId format (e.g., "BZ-KOTAKB", phone numbers)
+    //    doesn't match BankSenderMapper but the parser extracted the bank name correctly.
     final String normalizedBank = bank.trim();
     if (normalizedBank.isNotEmpty) {
       return normalizedBank;
+    }
+
+    // 4. Last resort: show the raw senderId
+    final String normalizedSender = senderId.trim();
+    if (normalizedSender.isNotEmpty) {
+      return normalizedSender;
     }
 
     return 'Unknown Sender';
@@ -186,7 +192,7 @@ class SmsTransaction {
       'title': counterparty.isEmpty ? bank : counterparty,
       'subtitle': account.isEmpty ? bank : 'A/C XX$account',
       'amount': signedAmount,
-      'category': 'Other',
+      'category': category ?? 'Other',
       'note': '',
       'dateTimeText': date,
       'rawSms': rawMessage,

@@ -76,7 +76,8 @@ class DriveBackupService {
         .doc(userEmail)
         .get();
     final Map<String, dynamic>? userData = userSnapshot.data();
-    final bool driveGranted = (userData?['driveAccessGranted'] as bool?) ?? false;
+    final bool driveGranted =
+        (userData?['driveAccessGranted'] as bool?) ?? false;
     if (!driveGranted) {
       return DriveBackupResult.failure('Drive access was not granted.');
     }
@@ -115,9 +116,10 @@ class DriveBackupService {
       }
     }
 
-    final bool scopesGranted = await _googleSignIn.requestScopes(
-      <String>[_driveFileScope, _driveAppDataScope],
-    );
+    final bool scopesGranted = await _googleSignIn.requestScopes(<String>[
+      _driveFileScope,
+      _driveAppDataScope,
+    ]);
     if (!scopesGranted) {
       return DriveBackupResult.failure('Google Drive scopes were not granted.');
     }
@@ -159,7 +161,9 @@ class DriveBackupService {
 
       int newTransactionsAdded = 0;
       for (final SmsTransaction transaction in transactions) {
-        final Map<String, dynamic> current = _transactionToDriveJson(transaction);
+        final Map<String, dynamic> current = _transactionToDriveJson(
+          transaction,
+        );
         final String id = current['transactionId'] as String;
         if (!mergedById.containsKey(id)) {
           newTransactionsAdded += 1;
@@ -168,11 +172,10 @@ class DriveBackupService {
       }
 
       final List<Map<String, dynamic>> mergedTransactions =
-          mergedById.values.toList()
-            ..sort(
-              (Map<String, dynamic> a, Map<String, dynamic> b) =>
-                  _transactionEpoch(b).compareTo(_transactionEpoch(a)),
-            );
+          mergedById.values.toList()..sort(
+            (Map<String, dynamic> a, Map<String, dynamic> b) =>
+                _transactionEpoch(b).compareTo(_transactionEpoch(a)),
+          );
 
       final bool shouldUpload =
           existingFileId == null || newTransactionsAdded > 0;
@@ -215,19 +218,16 @@ class DriveBackupService {
         }
       }
 
-      await _firestore.collection('users').doc(userEmail).set(
-        <String, dynamic>{
-          'driveLastBackupAt': FieldValue.serverTimestamp(),
-          'driveLastBackupCount': mergedTransactions.length,
-          'driveLastBackupNewCount': newTransactionsAdded,
-          'driveLastBackupWasUploaded': shouldUpload,
-          'driveBackupFileName': _transactionsFileName,
-          'driveLastBackupStatus': 'success',
-          'driveLastBackupError': null,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      await _firestore.collection('users').doc(userEmail).set(<String, dynamic>{
+        'driveLastBackupAt': FieldValue.serverTimestamp(),
+        'driveLastBackupCount': mergedTransactions.length,
+        'driveLastBackupNewCount': newTransactionsAdded,
+        'driveLastBackupWasUploaded': shouldUpload,
+        'driveBackupFileName': _transactionsFileName,
+        'driveLastBackupStatus': 'success',
+        'driveLastBackupError': null,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       return DriveBackupResult.success(
         uploaded: shouldUpload,
@@ -239,15 +239,12 @@ class DriveBackupService {
       debugPrint('Drive backup failed: $e');
       debugPrint(st.toString());
 
-      await _firestore.collection('users').doc(userEmail).set(
-        <String, dynamic>{
-          'driveLastBackupAt': FieldValue.serverTimestamp(),
-          'driveLastBackupStatus': 'failed',
-          'driveLastBackupError': e.toString(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      await _firestore.collection('users').doc(userEmail).set(<String, dynamic>{
+        'driveLastBackupAt': FieldValue.serverTimestamp(),
+        'driveLastBackupStatus': 'failed',
+        'driveLastBackupError': e.toString(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       return DriveBackupResult.failure(
         'Drive backup failed: ${e.runtimeType}. Check Google Cloud Drive API and OAuth setup.',
@@ -262,7 +259,8 @@ class DriveBackupService {
     required SmsTransaction updated,
   }) async {
     return _mutateTransactionsInDrive((List<Map<String, dynamic>> existing) {
-      final Map<String, Map<String, dynamic>> byId = <String, Map<String, dynamic>>{};
+      final Map<String, Map<String, dynamic>> byId =
+          <String, Map<String, dynamic>>{};
       for (final Map<String, dynamic> value in existing) {
         final String id = _resolveTransactionId(value);
         if (id.isNotEmpty) {
@@ -339,8 +337,8 @@ class DriveBackupService {
 
   Future<DriveBackupResult> _mutateTransactionsInDrive(
     ({List<Map<String, dynamic>> transactions, bool uploaded, bool changed})
-        Function(List<Map<String, dynamic>> existing)
-        mutation,
+    Function(List<Map<String, dynamic>> existing)
+    mutation,
   ) async {
     final User? currentUser = _firebaseAuth.currentUser;
     if (currentUser == null) {
@@ -357,7 +355,8 @@ class DriveBackupService {
         .doc(userEmail)
         .get();
     final Map<String, dynamic>? userData = userSnapshot.data();
-    final bool driveGranted = (userData?['driveAccessGranted'] as bool?) ?? false;
+    final bool driveGranted =
+        (userData?['driveAccessGranted'] as bool?) ?? false;
     if (!driveGranted) {
       return DriveBackupResult.failure('Drive access was not granted.');
     }
@@ -396,9 +395,10 @@ class DriveBackupService {
       }
     }
 
-    final bool scopesGranted = await _googleSignIn.requestScopes(
-      <String>[_driveFileScope, _driveAppDataScope],
-    );
+    final bool scopesGranted = await _googleSignIn.requestScopes(<String>[
+      _driveFileScope,
+      _driveAppDataScope,
+    ]);
     if (!scopesGranted) {
       return DriveBackupResult.failure('Google Drive scopes were not granted.');
     }
@@ -424,7 +424,11 @@ class DriveBackupService {
 
       final List<Map<String, dynamic>> existing =
           await _readExistingTransactions(client, existingFileId);
-      final ({List<Map<String, dynamic>> transactions, bool uploaded, bool changed})
+      final ({
+        List<Map<String, dynamic>> transactions,
+        bool uploaded,
+        bool changed,
+      })
       result = mutation(existing);
 
       if (!result.changed) {
@@ -476,8 +480,7 @@ class DriveBackupService {
 
   Future<String> _ensureKharchaFolder(drive.DriveApi driveApi) async {
     final drive.FileList list = await driveApi.files.list(
-      q:
-          "mimeType = 'application/vnd.google-apps.folder' and name = '$_folderName' and 'root' in parents and trashed = false",
+      q: "mimeType = 'application/vnd.google-apps.folder' and name = '$_folderName' and 'root' in parents and trashed = false",
       $fields: 'files(id,name)',
       spaces: 'drive',
       pageSize: 10,
@@ -511,8 +514,7 @@ class DriveBackupService {
     String folderId,
   ) async {
     final drive.FileList list = await driveApi.files.list(
-      q:
-          "name = '$_transactionsFileName' and '$folderId' in parents and trashed = false",
+      q: "name = '$_transactionsFileName' and '$folderId' in parents and trashed = false",
       $fields: 'files(id,name)',
       spaces: 'drive',
       pageSize: 10,
@@ -577,10 +579,13 @@ class DriveBackupService {
       'transactionId': id,
     };
 
+    // Only set default note if note is completely empty or null
+    // Do NOT overwrite if user has added a custom note
     final String note = (payload['note'] as String?)?.trim() ?? '';
     final bool hasRawMessage = transaction.rawMessage.trim().isNotEmpty;
-    if (hasRawMessage &&
-        (note.isEmpty || note.toLowerCase() == 'imported from sms')) {
+
+    // Only set default note if the note field is truly empty
+    if (hasRawMessage && note.isEmpty) {
       final String normalizedMethod = transaction.method.trim();
       payload['note'] = normalizedMethod.isEmpty
           ? 'Imported from SMS'
