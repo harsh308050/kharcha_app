@@ -179,6 +179,14 @@ class SmsReceiver : BroadcastReceiver() {
         
         Log.i(TAG, "Stored pending transaction: $transactionId")
         
+        // Check if user has disabled push notifications from the Settings screen.
+        // The preference is stored in Flutter's SharedPreferences (FlutterSharedPreferences file)
+        // with the key "flutter.push_notifications_enabled".
+        if (!areNotificationsEnabled(context)) {
+            Log.d(TAG, "Push notifications disabled by user, skipping notification for: $transactionId")
+            return
+        }
+        
         // Display notification via NotificationHelper
         try {
             NotificationHelper.showTransactionNotification(context, parsedTransaction, transactionId)
@@ -252,5 +260,20 @@ class SmsReceiver : BroadcastReceiver() {
                                    lower.contains("deposit")
         
         return hasAmount && hasTransactionKeyword
+    }
+    
+    /**
+     * Check if user has enabled push notifications in app settings.
+     * 
+     * Reads from Flutter's SharedPreferences (stored in FlutterSharedPreferences file)
+     * where the key is prefixed with "flutter." by the Flutter shared_preferences plugin.
+     * 
+     * @param context Android context
+     * @return True if notifications are enabled (default: true)
+     */
+    private fun areNotificationsEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        // Flutter's shared_preferences plugin prefixes keys with "flutter."
+        return prefs.getBoolean("flutter.push_notifications_enabled", true)
     }
 }

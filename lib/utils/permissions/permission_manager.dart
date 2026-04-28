@@ -1,10 +1,13 @@
 import 'package:permission_handler/permission_handler.dart' as ph;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Manages permissions required for background SMS transaction tracking.
 ///
-/// Requirements: 8.1, 8.3, 9.1, 9.3, 10.1, 10.4, 10.5
+/// Requirements: 8.1, 8.3, 9.1, 9.3
 class PermissionManager {
+  static const String _notificationsEnabledKey = 'push_notifications_enabled';
+
   /// Request SMS read permission
   Future<bool> requestSmsPermission() async {
     final PermissionStatus status = await Permission.sms.request();
@@ -14,12 +17,6 @@ class PermissionManager {
   /// Request notification permission (Android 13+)
   Future<bool> requestNotificationPermission() async {
     final PermissionStatus status = await Permission.notification.request();
-    return status.isGranted;
-  }
-
-  /// Request battery optimization whitelist
-  Future<bool> requestBatteryOptimizationWhitelist() async {
-    final PermissionStatus status = await Permission.ignoreBatteryOptimizations.request();
     return status.isGranted;
   }
 
@@ -33,18 +30,22 @@ class PermissionManager {
     return await Permission.notification.isGranted;
   }
 
-  /// Check if battery optimization is disabled (whitelisted)
-  Future<bool> isBatteryOptimizationDisabled() async {
-    return await Permission.ignoreBatteryOptimizations.isGranted;
+  /// Get the user's push notification preference (persisted in SharedPreferences).
+  ///
+  /// Returns `true` by default if the key has never been set.
+  Future<bool> isNotificationsEnabled() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_notificationsEnabledKey) ?? true;
+  }
+
+  /// Persist the user's push notification preference.
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_notificationsEnabledKey, enabled);
   }
 
   /// Open application settings
   Future<void> openAppSettings() async {
-    await ph.openAppSettings();
-  }
-
-  /// Open battery optimization settings
-  Future<void> openBatteryOptimizationSettings() async {
     await ph.openAppSettings();
   }
 }

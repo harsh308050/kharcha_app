@@ -14,6 +14,7 @@ import 'package:kharcha/utils/constants/app_colors.dart';
 import 'package:kharcha/utils/constants/app_image.dart';
 import 'package:kharcha/utils/constants/app_strings.dart';
 import 'package:kharcha/utils/my_cm.dart';
+import 'package:kharcha/utils/permissions/permission_manager.dart';
 
 class SettingsTabScreen extends StatefulWidget {
   const SettingsTabScreen({super.key});
@@ -23,7 +24,54 @@ class SettingsTabScreen extends StatefulWidget {
 }
 
 class SettingsTabScreenState extends State<SettingsTabScreen> {
+  final PermissionManager _permissionManager = PermissionManager();
   bool _pushNotificationsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationPreference();
+  }
+
+  Future<void> _loadNotificationPreference() async {
+    final bool enabled = await _permissionManager.isNotificationsEnabled();
+    if (mounted) {
+      setState(() {
+        _pushNotificationsEnabled = enabled;
+      });
+    }
+  }
+
+  Future<void> _handleNotificationToggle(bool value) async {
+    if (value) {
+      // User wants to enable notifications — request permission first
+      final bool granted = await _permissionManager.requestNotificationPermission();
+      if (!granted) {
+        if (mounted) {
+          showSnackBar(
+            context,
+            'Notification permission is required. Please enable it in app settings.',
+            AppColors.red,
+          );
+        }
+        return;
+      }
+    }
+
+    await _permissionManager.setNotificationsEnabled(value);
+    if (mounted) {
+      setState(() {
+        _pushNotificationsEnabled = value;
+      });
+      showSnackBar(
+        context,
+        value
+            ? 'Push notifications enabled'
+            : 'Push notifications disabled',
+        value ? AppColors.primary : AppColors.greyDark,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -251,15 +299,11 @@ class SettingsTabScreenState extends State<SettingsTabScreen> {
                 inactiveThumbColor: AppColors.white,
                 inactiveTrackColor: const Color(0xFFD6DDE3),
                 onChanged: (bool value) {
-                  setState(() {
-                    _pushNotificationsEnabled = value;
-                  });
+                  _handleNotificationToggle(value);
                 },
               ),
               onTap: () {
-                setState(() {
-                  _pushNotificationsEnabled = !_pushNotificationsEnabled;
-                });
+                _handleNotificationToggle(!_pushNotificationsEnabled);
               },
             ),
             sb(16),
